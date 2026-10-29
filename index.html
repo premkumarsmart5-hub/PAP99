@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0f17">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<title>AI Trader</title>
+<style>
+:root{--bg:#0b0f17;--card:#161d2b;--tx:#e6ebf5;--mut:#8b98b0;--up:#17803f;--dn:#b02a2a;--acc:#3b82f6}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--tx);font-family:system-ui,sans-serif;padding:12px;max-width:560px}
+h1{font-size:18px;margin:4px 0 8px}h2{font-size:15px;margin:14px 0 6px}
+#seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0}
+#seg button{background:var(--card);color:var(--mut);padding:14px 0;font-size:17px;margin:0;border:2px solid transparent}
+#seg button.on{background:var(--acc);color:#fff}
+#banner{background:var(--card);border-radius:14px;padding:16px;text-align:center;margin-top:6px}
+#banner.call{background:var(--up);color:#fff}#banner.put{background:var(--dn);color:#fff}
+#banner.unv{border:2px dashed #ffd27d}
+#banner .big{font-size:26px;font-weight:800}#banner .line{font-size:14px;margin-top:6px}
+.logb{background:rgba(0,0,0,.35);margin-top:10px;font-size:14px;padding:10px}
+#clock{text-align:center;color:var(--mut);margin:8px 0;font-size:13px}
+.card{background:var(--card);border-radius:10px;padding:12px;margin:6px 0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card b{font-size:16px}small{display:block;color:var(--mut);margin-top:4px;font-size:12px}
+small.ok{color:#6fdc8c}small.bad{color:#e9a36a}.sm{font-size:12px;font-weight:600;color:var(--mut);padding:4px 0}
+.tag{padding:7px 10px;border-radius:8px;font-weight:700;font-size:13px;background:#27324a;color:var(--mut);text-align:center;min-width:88px}
+.tag.call{background:var(--up);color:#fff}.tag.put{background:var(--dn);color:#fff}.tag.weak{border:1px dashed #ffd27d;color:#ffd27d}
+.chips2{margin-top:6px}.chip{display:inline-block;font-size:11px;padding:3px 7px;border-radius:6px;background:#222c40;margin:2px 3px 2px 0;color:var(--mut)}
+.chip.up{background:#14452a;color:#9be3b3}.chip.dn{background:#4b1d1d;color:#ffb0b0}
+input[type=text],select,button{font-size:16px;padding:12px;border-radius:10px;border:0;width:100%;margin:4px 0}
+input[type=text],select{background:var(--card);color:var(--tx)}
+button{background:var(--acc);color:#fff;font-weight:700}button:disabled{opacity:.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips label{display:inline-block;background:var(--card);border-radius:8px;padding:8px 10px;margin:3px 3px 3px 0;font-size:14px}
+.note{color:var(--mut);font-size:12px;margin:8px 0}label.note{display:block}
+.lg{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card);border-radius:8px;padding:8px 10px;margin:4px 0;font-size:12px}
+.mini{width:auto;padding:6px 10px;margin:0 0 0 4px;font-size:12px}.mini.w{background:var(--up)}.mini.l{background:var(--dn)}
+.res{font-weight:800;padding:4px 8px;border-radius:6px}.res.W{background:var(--up)}.res.L{background:var(--dn)}
+.callt{color:#6fdc8c}.putt{color:#ff8a8a}
+iframe{width:100%;height:340px;border:0;border-radius:10px;background:#000}
+summary{cursor:pointer;font-weight:700;padding:8px 0}
+</style></head>
+<body>
+<h1>AI Trader (signals only, UAE time)</h1>
+
+<div id="setup">
+  <p class="note">1) Free API key from twelvedata.com. 2) Paste it, choose your IQ Option payout, tap Start. Keep the screen on.</p>
+  <input type="text" id="key" placeholder="Twelve Data API key" autocomplete="off">
+  <label class="note">Your IQ Option payout (check on the asset)</label>
+  <select id="payout"><option value="80">80%</option><option value="85" selected>85%</option><option value="90">90%</option></select>
+  <button id="start">Start</button>
+</div>
+
+<div id="main" style="display:none">
+  <div id="seg"><button data-e="2">2 min</button><button data-e="5">5 min</button><button data-e="10">10 min</button></div>
+  <div id="banner"></div>
+  <div id="clock"></div>
+  <div class="grid">
+    <button id="refresh">Analyse now</button>
+    <select id="payout2"><option value="80">Payout 80%</option><option value="85">Payout 85%</option><option value="90">Payout 90%</option></select>
+  </div>
+  <label class="note"><input type="checkbox" id="auto" checked> Auto analyse at every candle close</label>
+  <label class="note"><input type="checkbox" id="strict" checked> Strict filter: 11:00-20:00 UAE only, skip volatile candles</label>
+  <div class="chips" id="chips"></div>
+  <p class="note" id="credit"></p>
+  <div id="pairs"></div>
+
+  <details><summary>Live market chart (TradingView reference)</summary>
+    <select id="chartPair"></select><iframe id="tv" title="chart"></iframe>
+    <p class="note">IQ Option has no embeddable chart, so this is a live forex chart for reference. Prices can differ slightly. <a style="color:#7db4ff" href="https://iqoption.com/traderoom" target="_blank" rel="noopener">Open IQ Option</a></p>
+  </details>
+
+  <h2>My trades (UAE time)</h2>
+  <p class="note" id="stats"></p>
+  <div id="log"></div>
+  <button id="clear" style="background:#27324a">Clear log</button>
+  <p class="note" id="status"></p>
+  <button id="stop" style="background:#27324a">Change API key</button>
+</div>
+
+<p class="note">How it works: for each pair the app downloads about 5000 candles and reads 37 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger, EMAs, 15 candle patterns, support and resistance, time of day). A tree-boosting AI trained in the background predicts the next move, and 8 classic strategies are tested alongside it. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
+
+<script id="core">
+/* ===== CORE: indicators, candle patterns, strategy library, tree-boosting AI, validation ===== */
+const FN=["ret1","ret2","ret3","ret5","ret10","ret20","rsi14","rsi7","d20","d50","spread","pctb","vol_ratio","rng_atr","body","upw","lw","stoch",
+ "hr_sin","hr_cos","macd_h","macd_d","stK","stD","adx","di_diff","cci","aroon","d_hh50","d_ll50","d200","slope200","bull_pats","bear_pats","doji","inside","consec"];
+const THR=[0.53,0.54,0.55,0.56,0.58,0.60,0.62];
+
+function emaArr(a,n){const k=2/(n+1),o=new Array(a.length);o[0]=a[0];for(let i=1;i<a.length;i++)o[i]=a[i]*k+o[i-1]*(1-k);return o;}
+function smaArr(a,n){const o=new Array(a.length).fill(NaN);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=n)s-=a[i-n];if(i>=n-1)o[i]=s/n;}return o;}
+function rsiArr(c,n){const out=new Array(c.length).fill(NaN);let ag=0,al=0;
+  for(let i=1;i<c.length;i++){const d=c[i]-c[i-1],g=Math.max(d,0),l=Math.max(-d,0);
+    if(i<=n){ag+=g/n;al+=l/n;if(i<n)continue;}else{ag=(ag*(n-1)+g)/n;al=(al*(n-1)+l)/n;}
+    out[i]=al===0?100:100-100/(1+ag/al);}
+  return out;}
+
+function buildInd(cs){
+  const n=cs.length,c=cs.map(x=>x.c),o=cs.map(x=>x.o),h=cs.map(x=>x.h),l=cs.map(x=>x.l),rng=h.map((v,i)=>v-l[i]);
+  const ind={n,c,o,h,l,rng,t:cs.map(x=>x.t)};
+  const atr=new Array(n).fill(NaN);let s=0;
+  for(let i=0;i<n;i++){s+=rng[i];if(i>=14)s-=rng[i-14];if(i>=13)atr[i]=s/14;}
+  ind.atr=atr;const pre=[0];for(let i=0;i<n;i++)pre.push(pre[i]+(isNaN(atr[i])?0:atr[i]));ind.atrPre=pre;
+  ind.e20=emaArr(c,20);ind.e50=emaArr(c,50);ind.e200=emaArr(c,200);ind.r14=rsiArr(c,14);ind.r7=rsiArr(c,7);
+  ind.bbm=smaArr(c,20);ind.bbs=new Array(n).fill(NaN);ind.lo=new Array(n).fill(NaN);ind.hi=new Array(n).fill(NaN);
+  for(let i=19;i<n;i++){let v=0;for(let j=i-19;j<=i;j++)v+=(c[j]-ind.bbm[i])**2;const sd=Math.sqrt(v/19);ind.bbs[i]=sd;ind.lo[i]=ind.bbm[i]-2*sd;ind.hi[i]=ind.bbm[i]+2*sd;}
+  const raw=new Array(n).fill(NaN);
+  for(let i=13;i<n;i++){let lo=Infinity,hi=-Infinity;for(let j=i-13;j<=i;j++){if(l[j]<lo)lo=l[j];if(h[j]>hi)hi=h[j];}raw[i]=100*(c[i]-lo)/(hi-lo+1e-12);}
+  ind.raw=raw;ind.K=smaArr(raw.map(v=>isNaN(v)?0:v),3);ind.D=smaArr(ind.K.map(v=>isNaN(v)?0:v),3);
+  const e12=emaArr(c,12),e26=emaArr(c,26);ind.macd=e12.map((v,i)=>v-e26[i]);ind.msig=emaArr(ind.macd,9);ind.hist=ind.macd.map((v,i)=>v-ind.msig[i]);
+  const N=14,pdi=new Array(n).fill(NaN),mdi=new Array(n).fill(NaN),adx=new Array(n).fill(NaN);let str=0,spd=0,smd=0,adxv=NaN;
+  for(let i=1;i<n;i++){
+    const up=h[i]-h[i-1],dn=l[i-1]-l[i],pdm=up>dn&&up>0?up:0,mdm=dn>up&&dn>0?dn:0,tr=Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1]));
+    if(i<=N){str+=tr;spd+=pdm;smd+=mdm;if(i<N)continue;}else{str=str-str/N+tr;spd=spd-spd/N+pdm;smd=smd-smd/N+mdm;}
+    pdi[i]=100*spd/(str+1e-12);mdi[i]=100*smd/(str+1e-12);
+    const dx=100*Math.abs(pdi[i]-mdi[i])/(pdi[i]+mdi[i]+1e-12);adxv=isNaN(adxv)?dx:adxv+(dx-adxv)/N;adx[i]=adxv;
+  }
+  ind.pdi=pdi;ind.mdi=mdi;ind.adx=adx;
+  const tp=cs.map(x=>(x.h+x.l+x.c)/3),tps=smaArr(tp,20),cci=new Array(n).fill(NaN);
+  for(let i=19;i<n;i++){let md=0;for(let j=i-19;j<=i;j++)md+=Math.abs(tp[j]-tps[i]);md/=20;cci[i]=(tp[i]-tps[i])/(0.015*md+1e-12);}
+  ind.cci=cci;
+  const au=new Array(n).fill(NaN),ad=new Array(n).fill(NaN),hh20=new Array(n).fill(NaN),ll20=new Array(n).fill(NaN),hh50=new Array(n).fill(NaN),ll50=new Array(n).fill(NaN);
+  for(let i=50;i<n;i++){
+    let ih=i,il=i;for(let j=i-14;j<=i;j++){if(h[j]>=h[ih])ih=j;if(l[j]<=l[il])il=j;}
+    au[i]=100*(14-(i-ih))/14;ad[i]=100*(14-(i-il))/14;
+    let a=-Infinity,b=Infinity;for(let j=i-20;j<i;j++){if(h[j]>a)a=h[j];if(l[j]<b)b=l[j];}hh20[i]=a;ll20[i]=b;
+    a=-Infinity;b=Infinity;for(let j=i-50;j<i;j++){if(h[j]>a)a=h[j];if(l[j]<b)b=l[j];}hh50[i]=a;ll50[i]=b;
+  }
+  ind.au=au;ind.ad=ad;ind.hh20=hh20;ind.ll20=ll20;ind.hh50=hh50;ind.ll50=ll50;
+  return ind;
+}
+
+/* ---------- candle pattern engine (returns [name, direction] pairs) ---------- */
+function patList(x,i){
+  const {c,o,h,l,atr}=x,R=h[i]-l[i]+1e-12,body=Math.abs(c[i]-o[i]),uw=h[i]-Math.max(o[i],c[i]),lw=Math.min(o[i],c[i])-l[i],a=(atr[i]||R)+1e-12;
+  const up=k=>c[i-k]>o[i-k],dn=k=>c[i-k]<o[i-k],bd=k=>Math.abs(c[i-k]-o[i-k]),out=[];
+  if(dn(1)&&up(0)&&o[i]<=c[i-1]&&c[i]>=o[i-1])out.push(["Bullish engulfing",1]);
+  if(up(1)&&dn(0)&&o[i]>=c[i-1]&&c[i]<=o[i-1])out.push(["Bearish engulfing",-1]);
+  if(lw/R>=0.6&&body/R<=0.3&&uw/R<=0.15)out.push(["Hammer / bullish pin bar",1]);
+  if(uw/R>=0.6&&body/R<=0.3&&lw/R<=0.15)out.push(["Shooting star / bearish pin bar",-1]);
+  if(body/R>=0.85&&up(0))out.push(["Bullish marubozu",1]);
+  if(body/R>=0.85&&dn(0))out.push(["Bearish marubozu",-1]);
+  if(dn(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&up(0)&&c[i]>(o[i-2]+c[i-2])/2)out.push(["Morning star",1]);
+  if(up(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&dn(0)&&c[i]<(o[i-2]+c[i-2])/2)out.push(["Evening star",-1]);
+  if(up(0)&&up(1)&&up(2)&&c[i]>c[i-1]&&c[i-1]>c[i-2]&&o[i]>o[i-1]&&o[i-1]>o[i-2])out.push(["Three white soldiers",1]);
+  if(dn(0)&&dn(1)&&dn(2)&&c[i]<c[i-1]&&c[i-1]<c[i-2]&&o[i]<o[i-1]&&o[i-1]<o[i-2])out.push(["Three black crows",-1]);
+  if(Math.abs(l[i]-l[i-1])<=0.1*a&&dn(1)&&up(0))out.push(["Tweezer bottom",1]);
+  if(Math.abs(h[i]-h[i-1])<=0.1*a&&up(1)&&dn(0))out.push(["Tweezer top",-1]);
+  if(dn(1)&&up(0)&&o[i]>c[i-1]&&c[i]<o[i-1]&&body<bd(1))out.push(["Bullish harami",1]);
+  if(up(1)&&dn(0)&&o[i]<c[i-1]&&c[i]>o[i-1]&&body<bd(1))out.push(["Bearish harami",-1]);
+  if(body/R<=0.1)out.push(["Doji (indecision)",0]);
+  if(h[i]<=h[i-1]&&l[i]>=l[i-1])out.push(["Inside bar",0]);
+  return out;
+}
+const bullPat=(x,i)=>patList(x,i).some(p=>p[1]===1),bearPat=(x,i)=>patList(x,i).some(p=>p[1]===-1);
+
+/* ---------- strategy library (classic professional setups) ---------- */
+const RULES=[
+ {id:"bbrsi",name:"BB + RSI + Aroon reversal",fn:(x,i)=>{const od=x.au[i]-x.ad[i],op=x.au[i-1]-x.ad[i-1];
+   if(x.c[i-1]<x.lo[i-1]&&x.c[i]>x.lo[i]&&x.r14[i]>x.r14[i-1]&&x.r14[i-1]<40&&od>op)return 1;
+   if(x.c[i-1]>x.hi[i-1]&&x.c[i]<x.hi[i]&&x.r14[i]<x.r14[i-1]&&x.r14[i-1]>60&&od<op)return -1;return 0;}},
+ {id:"rsix",name:"RSI extreme snap-back",fn:(x,i)=>{
+   if(x.r14[i]<32&&x.r14[i]>x.r14[i-1]&&x.c[i]>x.o[i])return 1;
+   if(x.r14[i]>68&&x.r14[i]<x.r14[i-1]&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"bbst",name:"Bollinger + Stochastic cross",fn:(x,i)=>{
+   if(x.l[i]<=x.lo[i]&&x.K[i]<25&&x.K[i]>x.D[i]&&x.K[i-1]<=x.D[i-1])return 1;
+   if(x.h[i]>=x.hi[i]&&x.K[i]>75&&x.K[i]<x.D[i]&&x.K[i-1]>=x.D[i-1])return -1;return 0;}},
+ {id:"pull",name:"Trend pullback (EMA + ADX + MACD)",fn:(x,i)=>{
+   if(x.e20[i]>x.e50[i]&&x.c[i]>x.e200[i]&&x.adx[i]>20&&x.pdi[i]>x.mdi[i]&&x.l[i]<=x.e20[i]+0.1*x.atr[i]&&x.c[i]>x.e20[i]&&x.c[i]>x.o[i]&&x.hist[i]>x.hist[i-1])return 1;
+   if(x.e20[i]<x.e50[i]&&x.c[i]<x.e200[i]&&x.adx[i]>20&&x.mdi[i]>x.pdi[i]&&x.h[i]>=x.e20[i]-0.1*x.atr[i]&&x.c[i]<x.e20[i]&&x.c[i]<x.o[i]&&x.hist[i]<x.hist[i-1])return -1;return 0;}},
+ {id:"macdst",name:"MACD cross + Stochastic trend",fn:(x,i)=>{
+   if(x.hist[i-1]<=0&&x.hist[i]>0&&x.c[i]>x.e50[i]&&x.K[i]>x.K[i-1])return 1;
+   if(x.hist[i-1]>=0&&x.hist[i]<0&&x.c[i]<x.e50[i]&&x.K[i]<x.K[i-1])return -1;return 0;}},
+ {id:"sr",name:"Candle pattern at support / resistance",fn:(x,i)=>{
+   if(bullPat(x,i)&&x.l[i]-x.ll50[i]<=0.5*x.atr[i])return 1;
+   if(bearPat(x,i)&&x.hh50[i]-x.h[i]<=0.5*x.atr[i])return -1;return 0;}},
+ {id:"adxb",name:"ADX breakout (trend follow)",fn:(x,i)=>{
+   if(x.adx[i]>25&&x.pdi[i]>x.mdi[i]&&x.c[i]>x.hh20[i]&&x.c[i]>x.o[i])return 1;
+   if(x.adx[i]>25&&x.mdi[i]>x.pdi[i]&&x.c[i]<x.ll20[i]&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"cci",name:"CCI +/-100 snap-back",fn:(x,i)=>{
+   if(x.cci[i-1]<-100&&x.cci[i]>=-100&&x.c[i]>x.o[i])return 1;
+   if(x.cci[i-1]>100&&x.cci[i]<=100&&x.c[i]<x.o[i])return -1;return 0;}}
+];
+
+function featRow(ind,i){
+  if(i<210)return null;
+  const {c,o,h,l,rng,atr,atrPre}=ind;
+  const a=atr[i]+1e-12,avg=(atrPre[i+1]-atrPre[i-99])/100+1e-12,R=rng[i]+1e-12,mx=Math.max(o[i],c[i]),mn=Math.min(o[i],c[i]);
+  const d=new Date(ind.t[i]),hr=d.getUTCHours()+d.getUTCMinutes()/60,pl=patList(ind,i);
+  let cons=0;for(let j=i;j>i-5;j--){const dir=c[j]>o[j]?1:(c[j]<o[j]?-1:0);if(dir===0)break;if(cons===0||Math.sign(cons)===dir)cons+=dir;else break;}
+  const row=[(c[i]-c[i-1])/a,(c[i]-c[i-2])/a,(c[i]-c[i-3])/a,(c[i]-c[i-5])/a,(c[i]-c[i-10])/a,(c[i]-c[i-20])/a,
+    ind.r14[i]/100,ind.r7[i]/100,(c[i]-ind.e20[i])/a,(c[i]-ind.e50[i])/a,(ind.e20[i]-ind.e50[i])/a,
+    (c[i]-ind.lo[i])/(4*ind.bbs[i]+1e-12),a/avg,rng[i]/a,(c[i]-o[i])/R,(h[i]-mx)/R,(mn-l[i])/R,ind.raw[i]/100,
+    Math.sin(2*Math.PI*hr/24),Math.cos(2*Math.PI*hr/24),
+    ind.hist[i]/a,(ind.hist[i]-ind.hist[i-1])/a,ind.K[i]/100,ind.D[i]/100,ind.adx[i]/100,(ind.pdi[i]-ind.mdi[i])/100,
+    Math.max(-3,Math.min(3,ind.cci[i]/100)),(ind.au[i]-ind.ad[i])/100,(ind.hh50[i]-c[i])/a,(c[i]-ind.ll50[i])/a,
+    (c[i]-ind.e200[i])/a,(ind.e200[i]-ind.e200[i-10])/a,
+    pl.filter(p=>p[1]===1).length,pl.filter(p=>p[1]===-1).length,pl.some(p=>p[0].startsWith("Doji"))?1:0,pl.some(p=>p[0]==="Inside bar")?1:0,cons/5];
+  return row.every(Number.isFinite)?row:null;
+}
+function buildFeatures(cs,ind){ind=ind||buildInd(cs);const X=new Array(cs.length).fill(null);for(let i=210;i<cs.length;i++)X[i]=featRow(ind,i);return X;}
+/* fast live path: only the newest candle is analysed, on the last 700 candles */
+function analyseLast(cs,model,val,strict,tf,force){
+  const w=cs.length>700?cs.slice(-700):cs,ind=buildInd(w),i=w.length-1,X=[];X[i]=featRow(ind,i);
+  return decide(ind,X,i,model,val,strict,tf,force);
+}
+function labelsArr(cs,k){const n=cs.length,y=new Array(n).fill(-2);
+  for(let i=0;i+k<n;i++){const a=cs[i].c,b=cs[i+k].c;y[i]=b>a?1:(b<a?0:-1);}return y;}
+
+function sessionOk(t){const d=new Date(t),day=d.getUTCDay(),h=d.getUTCHours();return day>=1&&day<=5&&h>=7&&h<16;}
+function filterReason(ind,X,i,strict,tf){
+  if(!strict)return null;
+  if(!sessionOk(ind.t[i]+tf))return "OFF-HOURS";
+  if(ind.rng[i]>2*ind.atr[i])return "VOLATILE";
+  return null;}
+function wilsonLow(w,n,z){if(!n)return 0;const p=w/n,d=1+z*z/n,c=p+z*z/(2*n),m=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return (c-m)/d;}
+
+/* ---------- AI: gradient-boosted decision trees (depth 2, captures indicator interactions) ---------- */
+function trainTrees(X,y,idx,R=100,lr=0.1,lam=5,minLeaf=50,nb=16){
+  const F=X[idx[0]].length,m=idx.length,edges=[],B=[];
+  for(let f=0;f<F;f++){
+    const vals=new Float64Array(m);for(let j=0;j<m;j++)vals[j]=X[idx[j]][f];
+    const sorted=Array.from(vals).sort((a,b)=>a-b),e=[];
+    for(let q=1;q<nb;q++){const v=sorted[Math.floor(q*m/nb)];if(!e.length||v>e[e.length-1])e.push(v);}
+    edges.push(e);const b=new Uint8Array(m);
+    for(let j=0;j<m;j++){const v=vals[j];let k=0;while(k<e.length&&v>=e[k])k++;b[j]=k;}
+    B.push(b);
+  }
+  const yy=idx.map(i=>y[i]),mean=yy.reduce((a,b)=>a+b,0)/m,base=Math.log(mean/(1-mean)),Fv=new Float64Array(m).fill(base),trees=[];
+  const all=new Int32Array(m);for(let j=0;j<m;j++)all[j]=j;
+  let g=new Float64Array(m),h=new Float64Array(m);
+  function best(rows){
+    let G=0,H=0;for(let q=0;q<rows.length;q++){G+=g[rows[q]];H+=h[rows[q]];}
+    let bs=null;
+    for(let f=0;f<F;f++){
+      const ne=edges[f].length;if(!ne)continue;
+      const Gh=new Float64Array(ne+1),Hh=new Float64Array(ne+1),Ch=new Int32Array(ne+1),Bf=B[f];
+      for(let q=0;q<rows.length;q++){const j=rows[q],b=Bf[j];Gh[b]+=g[j];Hh[b]+=h[j];Ch[b]++;}
+      let gl=0,hl=0,cl=0;
+      for(let b=0;b<ne;b++){gl+=Gh[b];hl+=Hh[b];cl+=Ch[b];const cr=rows.length-cl;if(cl<minLeaf||cr<minLeaf)continue;
+        const gr=G-gl,hr=H-hl,gain=gl*gl/(hl+lam)+gr*gr/(hr+lam)-G*G/(H+lam);
+        if(!bs||gain>bs.gain)bs={gain,f,b,thr:edges[f][b],gl,hl,gr,hr};}
+    }
+    return {bs,G,H};
+  }
+  const split=(rows,f,b)=>{const L=[],Rr=[];for(let q=0;q<rows.length;q++){const j=rows[q];(B[f][j]<=b?L:Rr).push(j);}return [L,Rr];};
+  for(let r=0;r<R;r++){
+    for(let j=0;j<m;j++){const p=1/(1+Math.exp(-Fv[j]));g[j]=yy[j]-p;h[j]=p*(1-p);}
+    const root=best(all);if(!root.bs||root.bs.gain<=1e-9)break;
+    const rb=root.bs,[L,Rr]=split(all,rb.f,rb.b),kids=[];
+    for(const rows of [L,Rr]){
+      const s=best(rows);
+      if(s.bs&&s.bs.gain>1e-9)kids.push({f:s.bs.f,b:s.bs.b,thr:s.bs.thr,l:lr*s.bs.gl/(s.bs.hl+lam),r:lr*s.bs.gr/(s.bs.hr+lam)});
+      else kids.push(lr*s.G/(s.H+lam));
+    }
+    trees.push({f:rb.f,thr:rb.thr,l:kids[0],r:kids[1]});
+    const Bf=B[rb.f];
+    for(let j=0;j<m;j++){let nd=Bf[j]<=rb.b?kids[0]:kids[1];if(typeof nd==="object")nd=B[nd.f][j]<=nd.b?nd.l:nd.r;Fv[j]+=nd;}
+  }
+  return {base,trees};
+}
+function predictP(model,x){let F=model.base;
+  for(const t of model.trees){let nd=x[t.f]<t.thr?t.l:t.r;if(typeof nd==="object")nd=x[nd.f]<nd.thr?nd.l:nd.r;F+=nd;}
+  return 1/(1+Math.exp(-F));}
+
+/* ---------- walk-forward validation ---------- */
+function validateAndTrain(cs,k,payout,strict,tf){
+  const be=1/(1+payout),ind=buildInd(cs),X=buildFeatures(cs,ind),y=labelsArr(cs,k),rows=[];
+  for(let i=0;i<cs.length;i++)if(X[i]&&y[i]>=0)rows.push(i);
+  if(rows.length<1200)return {model:null,val:{edge:false,be,rules:[],note:"Not enough history ("+rows.length+" candles)"}};
+  const days=r=>Math.max(1,(ind.t[r[r.length-1]]-ind.t[r[0]])/86400000*5/7);
+  const half=Math.floor(rows.length/2),rules=[];
+  for(const R of RULES){
+    let n=0,w=0,nA=0,wA=0,nB=0,wB=0;
+    rows.forEach((i,j)=>{
+      if(filterReason(ind,X,i,strict,tf))return;
+      const d=R.fn(ind,i);if(!d)return;const win=(d===1&&y[i]===1)||(d===-1&&y[i]===0)?1:0;
+      n++;w+=win;if(j<half){nA++;wA+=win;}else{nB++;wB+=win;}
+    });
+    const wr=n?w/n:0,low=wilsonLow(w,n,1.96),wrA=nA?wA/nA:0,wrB=nB?wB/nB:0;
+    rules.push({id:R.id,name:R.name,n,wr,low,wrA,wrB,nA,nB,pass:n>=80&&low>be&&nA>=30&&nB>=30&&wrA>be&&wrB>be});
+  }
+  const cut=Math.floor(rows.length*0.7),trainIdx=rows.slice(0,cut),lastTrain=trainIdx[trainIdx.length-1];
+  const testIdx=rows.slice(cut).filter(i=>i>lastTrain+k);
+  const mv=trainTrees(X,y,trainIdx),ps=testIdx.map(i=>predictP(mv,X[i]));
+  let best=null,bestRaw=null;
+  for(const thr of THR){
+    let n=0,w=0;
+    testIdx.forEach((i,j)=>{if(filterReason(ind,X,i,strict,tf))return;const p=ps[j];
+      if(p>=thr){n++;if(y[i]===1)w++;}else if(p<=1-thr){n++;if(y[i]===0)w++;}});
+    if(n>=100){const wr=w/n,low=wilsonLow(w,n,2.33);
+      if(!bestRaw||wr>bestRaw.wr)bestRaw={wr,n,thr};
+      if(low>be&&(!best||low>best.low))best={thr,n,wr,low};}
+  }
+  const model=trainTrees(X,y,rows),val={edge:!!best,be,testN:testIdx.length,rules,anyRule:rules.some(r=>r.pass),bestRaw};
+  if(best)Object.assign(val,{thr:best.thr,wr:best.wr,low:best.low,n:best.n,perDay:best.n/days(testIdx)});
+  else val.note="no AI setting beat break-even with confidence";
+  return {model,val};
+}
+
+/* ---------- live analysis of the last closed candle ---------- */
+function readout(x,i){
+  const items=[],add=(k,txt,dir)=>items.push({k,txt,dir});
+  const up=x.e20[i]>x.e50[i]&&x.c[i]>x.e200[i],dn=x.e20[i]<x.e50[i]&&x.c[i]<x.e200[i];
+  add("Trend",up?"Up":dn?"Down":"Mixed",up?1:dn?-1:0);
+  const r=x.r14[i];add("RSI",r.toFixed(0),r<30?1:r>70?-1:0);
+  const K=x.K[i],D=x.D[i];add("Stoch",K.toFixed(0),K<20&&K>D?1:K>80&&K<D?-1:0);
+  const mh=x.hist[i],mp=x.hist[i-1];add("MACD",mh>mp?"rising":"falling",mh>0&&mh>mp?1:mh<0&&mh<mp?-1:0);
+  const ad=x.adx[i];add("ADX",ad.toFixed(0),ad>20?(x.pdi[i]>x.mdi[i]?1:-1):0);
+  const cc=x.cci[i];add("CCI",cc.toFixed(0),cc<-100?1:cc>100?-1:0);
+  const pb=(x.c[i]-x.lo[i])/(x.hi[i]-x.lo[i]+1e-12);add("Bollinger",(pb*100).toFixed(0)+"%",pb<0.1?1:pb>0.9?-1:0);
+  const ao=x.au[i]-x.ad[i];add("Aroon",ao.toFixed(0),ao>50?1:ao<-50?-1:0);
+  const pats=patList(x,i);
+  let bull=0,bear=0;items.forEach(q=>{if(q.dir===1)bull++;else if(q.dir===-1)bear++;});
+  pats.forEach(p=>{if(p[1]===1)bull++;else if(p[1]===-1)bear++;});
+  return {items,pats,bull,bear};
+}
+function decide(ind,X,i,model,val,strict,tf,force){
+  const out={p:null,side:null,tier:null,srcs:[],off:null,lean:null,ro:null};
+  const x=X[i];if(!x||!model)return out;
+  out.p=predictP(model,x);out.off=filterReason(ind,X,i,strict,tf);out.ro=readout(ind,i);
+  out.lean={side:out.p>=0.5?"CALL":"PUT",conf:Math.max(out.p,1-out.p)};
+  const dirs=[],thr=val.edge?val.thr:0.58;let aiDir=0,ruleDir=0;
+  if(val.edge||force){if(out.p>=thr){dirs.push(1);aiDir=1;out.srcs.push("AI");}else if(out.p<=1-thr){dirs.push(-1);aiDir=-1;out.srcs.push("AI");}}
+  for(const r of val.rules){if(!r.pass)continue;const d=RULES.find(q=>q.id===r.id).fn(ind,i);if(d){dirs.push(d);ruleDir=d;out.srcs.push(r.name);}}
+  if(!dirs.length||out.off)return out;
+  if(dirs.some(d=>d!==dirs[0])){out.conflict=true;out.srcs=[];return out;}
+  out.side=dirs[0]===1?"CALL":"PUT";out.tier=aiDir&&ruleDir?"A+":(aiDir?"A":"B");
+  return out;
+}
+
+</script>
+<script>
+/* ===== APP ===== */
+const $=id=>document.getElementById(id);
+const ALL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD"];
+const TV={"EUR/USD":"FX:EURUSD","GBP/USD":"FX:GBPUSD","USD/JPY":"FX:USDJPY","AUD/USD":"FX:AUDUSD","USD/CAD":"FX:USDCAD"};
+const TFMIN={2:1,5:5,10:5},KC={2:2,5:1,10:2},WIN={2:20,5:40,10:40}; // candle size (min), candles ahead, entry window (sec)
+const CAP=760;
+let S={key:"",exp:5,pairs:["EUR/USD","GBP/USD","USD/JPY"],strict:true,payout:85,auto:true};
+try{Object.assign(S,JSON.parse(localStorage.getItem("ap_set")||"{}"));}catch(e){}
+const save=()=>{try{localStorage.setItem("ap_set",JSON.stringify(S));}catch(e){}};
+let LOG=[];try{LOG=JSON.parse(localStorage.getItem("ap_log")||"[]");}catch(e){}
+const saveLog=()=>{try{localStorage.setItem("ap_log",JSON.stringify(LOG.slice(-150)));}catch(e){}};
+const hist={},models={},state={},logged={};
+let busy=false,timer=null,pend=null,ticker=null,audioCtx=null,wake=null;
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fmtS=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});
+const fmtM=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",hour:"2-digit",minute:"2-digit",hour12:false});
+const uS=t=>fmtS.format(t),uM=t=>fmtM.format(t),mmss=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+const tfm=()=>TFMIN[S.exp],TF=()=>tfm()*60000,pct=x=>(x*100).toFixed(1)+"%";
+
+/* ---- credits + rate limit (free Twelve Data: 8/min, 800/day) ---- */
+const dayKey=()=>"ap_used_"+new Date().toISOString().slice(0,10);
+const used=()=>{try{return +(localStorage.getItem(dayKey())||0);}catch(e){return 0;}};
+const addCredit=()=>{try{localStorage.setItem(dayKey(),used()+1);}catch(e){}};
+const reqTimes=[];
+async function throttle(){while(true){const now=Date.now();while(reqTimes.length&&now-reqTimes[0]>62000)reqTimes.shift();
+  if(reqTimes.length<6)break;await sleep(reqTimes[0]+62000-now+200);}reqTimes.push(Date.now());}
+function marketClosed(){const d=new Date(),day=d.getUTCDay(),h=d.getUTCHours();return (day===5&&h>=22)||day===6||(day===0&&h<22);}
+
+async function fetchSeries(pair,size){
+  await throttle();addCredit();
+  const u=`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair)}&interval=${tfm()}min&outputsize=${size}&timezone=UTC&apikey=${S.key}`;
+  const j=await (await fetch(u)).json();
+  if(j.status==="error"){if(/current minute/i.test(j.message||""))throw new Error("RATE");throw new Error(j.message||"API error");}
+  return j.values.reverse().map(v=>({t:Date.parse(v.datetime.replace(" ","T")+"Z"),o:+v.open,h:+v.high,l:+v.low,c:+v.close}));
+}
+const mergeC=(a,b)=>{const m=new Map(a.map(x=>[x.t,x]));b.forEach(x=>m.set(x.t,x));return [...m.values()].sort((p,q)=>p.t-q.t).slice(-6000);};
+function closedOf(arr,tf){const now=Date.now();let n=arr.length;while(n>0&&arr[n-1].t+tf>now)n--;return arr.slice(0,n);}
+
+/* ---- AI training runs in a background thread so the screen never freezes ---- */
+let worker=null,wid=0;const wpend={};
+function getWorker(){
+  if(worker!==null)return worker;
+  try{
+    const src=$("core").textContent+"\nonmessage=function(e){var d=e.data;postMessage({id:d.id,r:validateAndTrain(d.cs,d.k,d.payout,d.strict,d.tf)});};";
+    worker=new Worker(URL.createObjectURL(new Blob([src],{type:"text/javascript"})));
+    worker.onmessage=e=>{const p=wpend[e.data.id];if(p){delete wpend[e.data.id];p.res(e.data.r);}};
+    worker.onerror=()=>{worker=false;for(const id in wpend){const p=wpend[id];delete wpend[id];p.res(validateAndTrain(...p.args));}};
+  }catch(e){worker=false;}
+  return worker;
+}
+function trainAsync(cs,k,payout,strict,tf){
+  return new Promise(res=>{
+    const w=getWorker(),args=[cs,k,payout,strict,tf];
+    if(!w){setTimeout(()=>res(validateAndTrain(...args)),30);return;}
+    const id=++wid;wpend[id]={res,args};w.postMessage({id,cs,k,payout,strict,tf});
+  });
+}
+
+async function processPair(pair){
+  const tf=TF(),k=KC[S.exp],hk=pair+"|"+tfm(),expected=Math.floor(Date.now()/tf)*tf-tf;
+  const mk=["v3",hk,k,S.strict?1:0,S.payout].join("|"),st=state[pair];
+  if(st&&st.mk===mk&&!st.err&&st.t>=expected)return;                 // already analysed this candle: free
+  let cs=null;
+  if(hist[hk]){const c0=closedOf(hist[hk],tf);if(c0.length&&c0[c0.length-1].t>=expected)cs=c0;} // 5m history reused for 5 and 10 min: free
+  if(!cs){
+    for(let attempt=0;attempt<3;attempt++){
+      if(used()>=CAP)throw new Error("CAP");
+      state[pair]=Object.assign({},st,{busy:hist[hk]?"Fetching newest candle...":"Downloading history..."});render();
+      try{
+        if(!hist[hk])hist[hk]=await fetchSeries(pair,5000);
+        else{const nw=await fetchSeries(pair,60),last=hist[hk][hist[hk].length-1].t;
+          hist[hk]=(nw.length&&last<nw[0].t-tf*1.5)?await fetchSeries(pair,5000):mergeC(hist[hk],nw);}
+        cs=closedOf(hist[hk],tf);
+        if(!cs.length||cs[cs.length-1].t>=expected||marketClosed())break;
+        await sleep(3500);                                              // newest candle not published yet: retry fast
+      }catch(e){if(e.message==="RATE"&&attempt<2){$("status").textContent="Per-minute limit, waiting...";await sleep(62000);continue;}throw e;}
+    }
+  }
+  if(!cs||cs.length<300)throw new Error("Not enough candle data");
+  let m=models[mk];
+  if(!m||Date.now()-m.at>3*3600e3){
+    state[pair]=Object.assign({},state[pair],{busy:"Training AI model (background)..."});render();
+    const r=await trainAsync(cs,k,S.payout/100,S.strict,tf);m=models[mk]={model:r.model,val:r.val,at:Date.now()};
+  }
+  const last=cs[cs.length-1],val=m.val;
+  if(!m.model){state[pair]={mk,t:last.t,price:last.c,val,err:val.note};return;}
+  const d=analyseLast(cs,m.model,val,S.strict,tf,false);
+  const stale=Date.now()-last.t>Math.max(20*60000,4*tf),fresh=last.t>=expected,closeT=last.t+tf;
+  state[pair]={mk,t:last.t,price:last.c,val,d,stale,fresh,closeT};
+  if(d.side&&fresh&&!stale&&!logged[pair+closeT]&&Date.now()<=closeT+WIN[S.exp]*1000){
+    logged[pair+closeT]=1;addLog(pair,d.side,d.tier,d.srcs,d.p,closeT,true);beep();
+  }
+}
+function addLog(pair,side,tier,srcs,p,closeT,validated){
+  const conf=p===null?null:Math.round((side==="CALL"?p:1-p)*100);
+  if(LOG.some(x=>x.id===closeT+pair+S.exp))return;
+  LOG.push({id:closeT+pair+S.exp,pair,side,tier,srcs,conf,validated,exp:S.exp,closeT,expiryAt:closeT+S.exp*60000,res:null});saveLog();
+}
+function beep(){
+  try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    [900,1200,1500].forEach((f,q)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);
+      g.gain.value=0.3;o.start(audioCtx.currentTime+q*0.22);o.stop(audioCtx.currentTime+q*0.22+0.18);});}catch(e){}
+  try{navigator.vibrate&&navigator.vibrate([300,150,300,150,500]);}catch(e){}
+}
+
+async function runAll(){
+  if(busy)return;
+  if(marketClosed()){$("status").textContent="Forex market is closed (weekend). No credits used.";return;}
+  busy=true;$("refresh").disabled=true;const snap=S.exp;let capped=false;
+  for(const p of S.pairs){
+    if(snap!==S.exp)break;
+    try{await processPair(p);}
+    catch(e){if(e.message==="CAP"){capped=true;break;}
+      state[p]={err:e.message==="RATE"?"Per-minute limit. Close other copies of the app, then Refresh.":String(e.message).slice(0,100)};}
+    render();
+  }
+  $("status").textContent=capped?`Daily credit cap reached (${used()}). Paused; resets 04:00 UAE.`:`Updated ${uS(Date.now())} UAE | Credits used today on this phone: ${used()}/800`;
+  busy=false;$("refresh").disabled=false;render();
+}
+function schedule(){clearTimeout(timer);if(!S.auto)return;const tf=TF(),now=Date.now(),next=Math.ceil(now/tf)*tf+2500;
+  timer=setTimeout(async()=>{await runAll();schedule();},next-now);}
+function refreshNow(){clearTimeout(timer);clearTimeout(pend);
+  pend=setTimeout(async function go(){if(busy){pend=setTimeout(go,1500);return;}await runAll();schedule();},300);}
+
+/* ---- best setup selection ---- */
+function pickSetup(){
+  const now=Date.now(),c=[];
+  for(const p of S.pairs){
+    const s=state[p];if(!s||s.err||!s.d||!s.d.lean||!s.fresh||s.stale)continue;
+    if(now>s.closeT+WIN[S.exp]*1000)continue;
+    const v=s.d.side?{side:s.d.side,conf:s.d.p!==null?(s.d.side==="CALL"?s.d.p:1-s.d.p):s.d.lean.conf,validated:true}:{side:s.d.lean.side,conf:s.d.lean.conf,validated:false};
+    if(s.d.off&&!v.validated)continue;
+    const agree=s.d.lean.side===v.side?(v.side==="CALL"?s.d.ro.bull-s.d.ro.bear:s.d.ro.bear-s.d.ro.bull):0;
+    const rank=(v.validated?10:0)+({"A+":3,"A":2,"B":1}[s.d.tier]||0)+v.conf+Math.max(-2,Math.min(3,agree))*0.01;
+    c.push({pair:p,s,v,rank,agree});
+  }
+  c.sort((a,b)=>b.rank-a.rank);return c[0]||null;
+}
+
+/* ---- rendering ---- */
+function chipsHtml(ro){return ro.items.map(q=>`<span class="chip ${q.dir===1?"up":q.dir===-1?"dn":""}">${q.k} ${q.txt} ${q.dir===1?"▲":q.dir===-1?"▼":""}</span>`).join("");}
+function pairHtml(p){
+  const s=state[p];
+  if(!s)return `<div class="card"><div class="top"><b>${p}</b><span class="tag">waiting</span></div></div>`;
+  if(s.err)return `<div class="card"><div class="top"><b>${p}</b><span class="tag">ERROR</span></div><small>${s.err}</small></div>`;
+  if(s.busy&&!s.d)return `<div class="card"><div class="top"><b>${p}</b><span class="tag">WORKING</span></div><small>${s.busy}</small></div>`;
+  const d=s.d,v=s.val;let tag="WAIT",cls="";
+  if(s.stale)tag="CLOSED";else if(d.side){tag=d.side;cls=d.side.toLowerCase();}
+  else if(d.off)tag=d.off;else if(d.conflict)tag="CONFLICT";else if(d.lean&&d.lean.conf>=0.53){tag=d.lean.side+"?";cls="weak";}
+  const ai=v.edge?`<small class="ok">AI proven: ${pct(v.wr)} on ${v.n} unseen trades (worst-case ${pct(v.low)}, break-even ${pct(v.be)})</small>`
+    :`<small class="bad">AI not proven right now${v.bestRaw?` (best seen ${pct(v.bestRaw.wr)} on ${v.bestRaw.n} trades)`:""}. Lean is for demo only.</small>`;
+  const rp=v.rules.filter(r=>r.pass);
+  const rl=`<small class="${rp.length?"ok":"bad"}">Strategies proven: ${rp.length?rp.map(r=>`${r.name} (${pct(r.wr)}, ${r.n})`).join("; "):"none right now"}</small>`;
+  const det=`<details><summary class="sm">All strategy tests</summary>${v.rules.map(r=>`<small>${r.pass?"PASS":"fail"} | ${r.name}: ${pct(r.wr)} on ${r.n} (older ${pct(r.wrA)}, newer ${pct(r.wrB)})</small>`).join("")}</details>`;
+  const lean=d.lean?`AI lean ${d.lean.side} ${(d.lean.conf*100).toFixed(0)}% | indicators ${d.ro.bull} bull / ${d.ro.bear} bear`:"";
+  const pats=d.ro.pats.length?`<small>Candle patterns: ${d.ro.pats.map(q=>q[0]).join(", ")}</small>`:`<small>Candle patterns: none on the last candle</small>`;
+  return `<div class="card"><div class="top"><div><b>${p}</b><small>${s.price} | ${lean}</small></div><span class="tag ${cls}">${tag}</span></div>
+   <div class="chips2">${chipsHtml(d.ro)}</div>${pats}${d.side?`<small class="ok">Validated signal, quality ${d.tier}: ${d.srcs.join(" + ")}</small>`:""}${ai}${rl}${det}</div>`;
+}
+function reasonsFor(c){const side=c.v.side==="CALL"?1:-1,r=[];
+  c.s.d.ro.items.forEach(q=>{if(q.dir===side)r.push(q.k+" "+q.txt);});c.s.d.ro.pats.forEach(q=>{if(q[1]===side)r.push(q[0]);});return r;}
+function bannerHtml(){
+  const b=$("banner"),c=pickSetup(),now=Date.now();
+  if(!c){const tf=TF(),nxt=Math.ceil(now/tf)*tf;b.className="";
+    b.innerHTML=`<div class="big" style="color:var(--mut)">Analysing...</div><div class="line">No entry open right now. Next candle opens ${uS(nxt)} UAE; analysis follows within seconds.</div>`;return;}
+  const closeT=c.s.closeT,left=Math.max(0,Math.ceil((closeT+WIN[S.exp]*1000-now)/1000)),expiryAt=closeT+S.exp*60000,rs=reasonsFor(c);
+  b.className=c.v.side.toLowerCase()+(c.v.validated?"":" unv");
+  b.innerHTML=`<div class="big">${c.pair}  ${c.v.side==="CALL"?"CALL ▲":"PUT ▼"}</div>
+   <div class="line">Entry <b>${uS(closeT)}</b> UAE | Expiry <b>${uS(expiryAt)}</b> UAE (${S.exp} min)</div>
+   <div class="line">Confidence ${(c.v.conf*100).toFixed(0)}% | ${c.v.validated?`VALIDATED, quality ${c.s.d.tier}`:"NOT VALIDATED, demo only"}</div>
+   <div class="line">${rs.length?"Why: "+rs.slice(0,6).join(", "):"Mixed signals, weak setup"}</div>
+   <div class="line">Entry window closes in <b>${mmss(left)}</b></div>
+   ${c.v.validated?"":`<button class="logb" data-act="log" data-pair="${c.pair}">Log this as my demo trade</button>`}`;
+}
+function logHtml(){
+  const rows=[...LOG].reverse().slice(0,25),W=LOG.filter(x=>x.res==="W").length,L=LOG.filter(x=>x.res==="L").length,n=W+L,be=100/(1+S.payout/100);
+  $("stats").textContent=n?`Your results: ${W} wins, ${L} losses | win rate ${(W/n*100).toFixed(1)}% (break-even ${be.toFixed(1)}%)`:"Mark each trade Win or Loss to see your real win rate.";
+  $("log").innerHTML=rows.length?rows.map(x=>`<div class="lg"><div>${uM(x.closeT)} | ${x.pair} <b class="${x.side.toLowerCase()}t">${x.side}</b> | ${x.exp}m | ${x.validated?"validated "+(x.tier||""):"demo"} | exp ${uM(x.expiryAt)}</div>
+   <div>${x.res?`<span class="res ${x.res}">${x.res==="W"?"WIN":"LOSS"}</span>`:`<button data-id="${x.id}" data-r="W" class="mini w">Win</button><button data-id="${x.id}" data-r="L" class="mini l">Loss</button>`}</div></div>`).join(""):"No trades logged yet.";
+}
+function render(){
+  $("pairs").innerHTML=S.pairs.map(pairHtml).join("");
+  const ph=Math.round(S.pairs.length*60/tfm());
+  $("credit").textContent=`About ${ph} credits per hour while running (free limit 800/day).`+(ph>150?" That is high: use fewer pairs or the 5 or 10 minute expiry.":"");
+  document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",+b.dataset.e===S.exp));
+  bannerHtml();logHtml();
+}
+function tick(){
+  const tf=TF(),now=Date.now(),nxt=Math.ceil(now/tf)*tf,left=Math.ceil((nxt-now)/1000);
+  $("clock").innerHTML=`UAE <b>${uS(now)}</b> | next ${tfm()}m candle opens <b>${uS(nxt)}</b> in ${mmss(left)}`;bannerHtml();
+}
+function setChart(){const pair=$("chartPair").value,iv=S.exp===2?"1":"5";
+  $("tv").src=`https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(TV[pair])}&interval=${iv}&theme=dark&style=1&timezone=Asia%2FDubai&hidesidetoolbar=1&withdateranges=0&saveimage=0&locale=en`;}
+function drawChips(){
+  $("chips").innerHTML=ALL.map(p=>`<label><input type="checkbox" data-p="${p}" ${S.pairs.includes(p)?"checked":""}> ${p}</label>`).join("");
+  document.querySelectorAll("#chips input").forEach(cb=>cb.onchange=()=>{
+    S.pairs=[...document.querySelectorAll("#chips input:checked")].map(x=>x.dataset.p);
+    if(!S.pairs.length){cb.checked=true;S.pairs=[cb.dataset.p];}save();render();refreshNow();});
+  $("chartPair").innerHTML=ALL.map(p=>`<option>${p}</option>`).join("");
+}
+const resetAll=()=>{for(const k in state)delete state[k];};
+
+async function start(){
+  S.key=$("key").value.trim();S.payout=+$("payout").value;
+  if(!S.key){alert("Paste your Twelve Data API key first.");return;}
+  save();$("setup").style.display="none";$("main").style.display="block";
+  $("strict").checked=S.strict;$("auto").checked=S.auto;$("payout2").value=String(S.payout);
+  drawChips();setChart();
+  try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();audioCtx.resume();}catch(e){}
+  try{wake=await navigator.wakeLock.request("screen");}catch(e){}
+  getWorker();render();clearInterval(ticker);ticker=setInterval(tick,1000);tick();refreshNow();
+}
+function stop(){clearTimeout(timer);clearInterval(ticker);try{wake&&wake.release();}catch(e){}$("main").style.display="none";$("setup").style.display="block";}
+
+try{$("key").value=S.key||"";$("payout").value=String(S.payout);}catch(e){}
+$("start").onclick=start;$("stop").onclick=stop;$("refresh").onclick=refreshNow;
+document.querySelectorAll("#seg button").forEach(b=>b.onclick=()=>{S.exp=+b.dataset.e;save();resetAll();setChart();render();refreshNow();});
+$("strict").onchange=e=>{S.strict=e.target.checked;save();resetAll();render();refreshNow();};
+$("payout2").onchange=e=>{S.payout=+e.target.value;save();resetAll();render();refreshNow();};
+$("auto").onchange=e=>{S.auto=e.target.checked;save();schedule();};
+$("chartPair").onchange=setChart;
+$("clear").onclick=()=>{if(confirm("Clear your trade log?")){LOG=[];saveLog();render();}};
+$("log").onclick=e=>{const b=e.target.closest("button[data-id]");if(!b)return;const x=LOG.find(l=>l.id===b.dataset.id);if(x){x.res=b.dataset.r;saveLog();render();}};
+$("banner").onclick=e=>{const b=e.target.closest("button[data-act]");if(!b)return;const s=state[b.dataset.pair];
+  if(s&&s.d){addLog(b.dataset.pair,s.d.lean.side,null,[],s.d.p,s.closeT,false);render();}};
+document.addEventListener("visibilitychange",async()=>{if(document.visibilityState==="visible"&&$("main").style.display==="block"){try{wake=await navigator.wakeLock.request("screen");}catch(e){}refreshNow();}});
+if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(()=>{});}
+
+</script>
+</body></html>

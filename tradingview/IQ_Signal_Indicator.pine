@@ -38,7 +38,7 @@ htfTrend(tf) =>
 t15 = htfTrend("15")
 t60 = htfTrend("60")
 
-// ---------- candle patterns ----------
+// ---------- candle patterns (weighted, trend-aware) ----------
 rng = math.max(high - low, syminfo.mintick)
 body = math.abs(close - open)
 upW = high - math.max(open, close)
@@ -47,16 +47,43 @@ bull0 = close > open
 bear0 = close < open
 bull1 = close[1] > open[1]
 bear1 = close[1] < open[1]
+body1 = math.abs(close[1] - open[1])
+body2 = math.abs(close[2] - open[2])
+prior = (close[1] - close[6]) / atr
 bullEngulf = bear1 and bull0 and open <= close[1] and close >= open[1]
 bearEngulf = bull1 and bear0 and open >= close[1] and close <= open[1]
-hammer = loW / rng >= 0.6 and body / rng <= 0.3 and upW / rng <= 0.15
-star = upW / rng >= 0.6 and body / rng <= 0.3 and loW / rng <= 0.15
-morning = close[2] < open[2] and math.abs(close[2] - open[2]) >= 0.6 * atr and math.abs(close[1] - open[1]) <= 0.3 * math.abs(close[2] - open[2]) and bull0 and close > (open[2] + close[2]) / 2
-evening = close[2] > open[2] and math.abs(close[2] - open[2]) >= 0.6 * atr and math.abs(close[1] - open[1]) <= 0.3 * math.abs(close[2] - open[2]) and bear0 and close < (open[2] + close[2]) / 2
-piercing = bear1 and bull0 and math.abs(close[1] - open[1]) >= 0.5 * atr and close > (open[1] + close[1]) / 2 and close < open[1]
-darkCloud = bull1 and bear0 and math.abs(close[1] - open[1]) >= 0.5 * atr and close < (open[1] + close[1]) / 2 and close > open[1]
-bullPat = bullEngulf or hammer or morning or piercing
-bearPat = bearEngulf or star or evening or darkCloud
+longLow = loW / rng >= 0.6 and body / rng <= 0.3 and upW / rng <= 0.15
+longUp = upW / rng >= 0.6 and body / rng <= 0.3 and loW / rng <= 0.15
+hammer = longLow and prior <= 0.5
+hangingMan = longLow and prior > 0.5
+invHammer = longUp and prior < -0.5
+star = longUp and prior >= -0.5
+morning = close[2] < open[2] and body2 >= 0.6 * atr and body1 <= 0.3 * body2 and bull0 and close > (open[2] + close[2]) / 2
+evening = close[2] > open[2] and body2 >= 0.6 * atr and body1 <= 0.3 * body2 and bear0 and close < (open[2] + close[2]) / 2
+piercing = bear1 and bull0 and body1 >= 0.5 * atr and close > (open[1] + close[1]) / 2 and close < open[1]
+darkCloud = bull1 and bear0 and body1 >= 0.5 * atr and close < (open[1] + close[1]) / 2 and close > open[1]
+bullHarami = bear1 and bull0 and open >= close[1] and close < open[1] and body < 0.6 * body1
+bearHarami = bull1 and bear0 and open <= close[1] and close > open[1] and body < 0.6 * body1
+threeInUp = bullHarami[1] and bull0 and close > close[1] and close > open[2]
+threeInDn = bearHarami[1] and bear0 and close < close[1] and close < open[2]
+threeOutUp = bullEngulf[1] and bull0 and close > close[1]
+threeOutDn = bearEngulf[1] and bear0 and close < close[1]
+keyRevUp = high > high[1] and low < low[1] and prior < 0 and bull0 and close >= high - 0.25 * rng
+keyRevDn = high > high[1] and low < low[1] and prior > 0 and bear0 and close <= low + 0.25 * rng
+dragonfly = body / rng <= 0.1 and loW / rng >= 0.6 and upW / rng <= 0.1
+gravestone = body / rng <= 0.1 and upW / rng >= 0.6 and loW / rng <= 0.1
+tweezBot = math.abs(low - low[1]) <= 0.1 * atr and bear1 and bull0
+tweezTop = math.abs(high - high[1]) <= 0.1 * atr and bull1 and bear0
+
+patBull = (bullEngulf ? 2 : 0) + (hammer ? 2 : 0) + (invHammer ? 1.5 : 0) + (morning ? 3 : 0) + (piercing ? 2 : 0) + (bullHarami ? 1 : 0) + (threeInUp ? 2.5 : 0) + (threeOutUp ? 3 : 0) + (keyRevUp ? 2 : 0) + (dragonfly ? 1.5 : 0) + (tweezBot ? 1.5 : 0)
+patBear = (bearEngulf ? 2 : 0) + (star ? 2 : 0) + (hangingMan ? 1.5 : 0) + (evening ? 3 : 0) + (darkCloud ? 2 : 0) + (bearHarami ? 1 : 0) + (threeInDn ? 2.5 : 0) + (threeOutDn ? 3 : 0) + (keyRevDn ? 2 : 0) + (gravestone ? 1.5 : 0) + (tweezTop ? 1.5 : 0)
+// location multiplier: support/resistance, Bollinger band, RSI extreme
+bullLoc = 1 + (low - ll50 <= 0.7 * atr ? 0.5 : 0) + (low <= bbLo or low[1] <= bbLo[1] ? 0.5 : 0) + (rsi < 40 ? 0.5 : 0)
+bearLoc = 1 + (hh50 - high <= 0.7 * atr ? 0.5 : 0) + (high >= bbUp or high[1] >= bbUp[1] ? 0.5 : 0) + (rsi > 60 ? 0.5 : 0)
+bullStr = patBull * bullLoc
+bearStr = patBear * bearLoc
+bullPat = patBull > 0
+bearPat = patBear > 0
 
 // RSI divergence (new 10-bar extreme without RSI confirmation)
 pl = ta.lowest(low, 10)[3]
@@ -75,8 +102,7 @@ bullScore += hist > hist[1] ? 1 : 0
 bullScore += adx > 20 and diPlus > diMinus ? 1 : 0
 bullScore += cci[1] < -100 and cci >= -100 ? 1 : 0
 bullScore += low <= bbLo or close[1] < bbLo[1] ? 1 : 0
-bullScore += bullPat ? 2 : 0
-bullScore += bullPat and low - ll50 <= 0.5 * atr ? 1 : 0
+bullScore += bullStr >= 4 ? 3 : bullStr >= 2 ? 2 : bullPat ? 1 : 0
 bullScore += bullDiv or bullDiv[1] ? 1 : 0
 bullScore += t15 == 1 ? 1 : 0
 bullScore += t60 == 1 ? 1 : 0
@@ -89,8 +115,7 @@ bearScore += hist < hist[1] ? 1 : 0
 bearScore += adx > 20 and diMinus > diPlus ? 1 : 0
 bearScore += cci[1] > 100 and cci <= 100 ? 1 : 0
 bearScore += high >= bbUp or close[1] > bbUp[1] ? 1 : 0
-bearScore += bearPat ? 2 : 0
-bearScore += bearPat and hh50 - high <= 0.5 * atr ? 1 : 0
+bearScore += bearStr >= 4 ? 3 : bearStr >= 2 ? 2 : bearPat ? 1 : 0
 bearScore += bearDiv or bearDiv[1] ? 1 : 0
 bearScore += t15 == -1 ? 1 : 0
 bearScore += t60 == -1 ? 1 : 0
@@ -117,9 +142,9 @@ barsAhead = math.max(1, math.round(expiryMin / tfMin))
 expiryTime = time_close + expiryMin * 60000
 
 if showLabels and callSig
-    label.new(bar_index, low - 0.3 * atr, "CALL " + str.tostring(expiryMin) + "m\nscore " + str.tostring(bullScore) + "\nexp " + str.format_time(expiryTime, "HH:mm"), style=label.style_label_up, color=color.new(color.green, 0), textcolor=color.white, size=size.small)
+    label.new(bar_index, low - 0.3 * atr, "CALL " + str.tostring(expiryMin) + "m\nscore " + str.tostring(bullScore) + "\ncandle " + str.tostring(bullStr, "#.0") + "\nexp " + str.format_time(expiryTime, "HH:mm"), style=label.style_label_up, color=color.new(color.green, 0), textcolor=color.white, size=size.small)
 if showLabels and putSig
-    label.new(bar_index, high + 0.3 * atr, "PUT " + str.tostring(expiryMin) + "m\nscore " + str.tostring(bearScore) + "\nexp " + str.format_time(expiryTime, "HH:mm"), style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+    label.new(bar_index, high + 0.3 * atr, "PUT " + str.tostring(expiryMin) + "m\nscore " + str.tostring(bearScore) + "\ncandle " + str.tostring(bearStr, "#.0") + "\nexp " + str.format_time(expiryTime, "HH:mm"), style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
 
 // ---------- running backtest on this chart ----------
 // Entry = this candle's close, result = close barsAhead candles later (matches clock-aligned IQ Option expiries).
@@ -144,7 +169,7 @@ while array.size(sigBar) > 0 and bar_index - array.get(sigBar, 0) >= barsAhead
 breakEven = 100.0 / (1 + payoutPct / 100.0)
 total = wins + losses
 winRate = total > 0 ? 100.0 * wins / total : na
-var table tb = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 20), border_width=1)
+var table tb = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 20), border_width=1)
 if barstate.islast
     table.cell(tb, 0, 0, "Expiry", text_color=color.white)
     table.cell(tb, 1, 0, str.tostring(expiryMin) + " min (" + str.tostring(barsAhead) + " bars)", text_color=color.white)
@@ -156,6 +181,8 @@ if barstate.islast
     table.cell(tb, 1, 3, str.tostring(breakEven, "#.0") + "%", text_color=color.white)
     table.cell(tb, 0, 4, "Score now", text_color=color.white)
     table.cell(tb, 1, 4, "bull " + str.tostring(bullScore) + " / bear " + str.tostring(bearScore), text_color=color.white)
+    table.cell(tb, 0, 5, "Candle strength", text_color=color.white)
+    table.cell(tb, 1, 5, "bull " + str.tostring(bullStr, "#.0") + " / bear " + str.tostring(bearStr, "#.0"), text_color=color.white)
 
 if timeframe.in_seconds() > expiryMin * 60
     runtime.error("Use a chart timeframe of " + str.tostring(expiryMin) + " minutes or lower (1m or 5m recommended).")

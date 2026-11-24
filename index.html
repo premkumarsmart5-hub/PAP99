@@ -80,13 +80,14 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
   <button id="stop" style="background:#27324a">Change API key</button>
 </div>
 
-<p class="note">How it works: for each pair the app downloads about 5000 five-minute candles and reads 45 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger squeeze, EMAs, RSI divergence, 17 candle patterns, support and resistance, 15-minute and 1-hour trend, time of day). Two AI models trained in the background (gradient-boosted trees + logistic regression) must agree on the direction for the chosen expiry (5, 10 or 15 min), and 10 classic strategies are tested alongside them. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
+<p class="note">How it works: for each pair the app downloads about 5000 five-minute candles and reads 49 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger squeeze, EMAs, RSI divergence, 32 candle patterns scored by location plus patterns on the 15-minute candle, support and resistance, 15-minute and 1-hour trend, time of day). Two AI models trained in the background (gradient-boosted trees + logistic regression) must agree on the direction for the chosen expiry (5, 10 or 15 min), and 10 classic strategies plus every candle pattern are tested on this pair's own history. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
 
 <script id="core">
 /* ===== CORE: indicators, candle patterns, strategy library, tree-boosting AI, validation ===== */
 const FN=["ret1","ret2","ret3","ret5","ret10","ret20","rsi14","rsi7","d20","d50","spread","pctb","vol_ratio","rng_atr","body","upw","lw","stoch",
  "hr_sin","hr_cos","macd_h","macd_d","stK","stD","adx","di_diff","cci","aroon","d_hh50","d_ll50","d200","slope200","bull_pats","bear_pats","doji","inside","consec",
- "h15_trend","h15_rsi","h15_macd","h60_trend","h60_rsi","h60_dist","squeeze","rsi_div"];
+ "h15_trend","h15_rsi","h15_macd","h60_trend","h60_rsi","h60_dist","squeeze","rsi_div",
+ "pat_bull_str","pat_bear_str","h15_pat_bull","h15_pat_bear"];
 const THR=[0.53,0.54,0.55,0.56,0.58,0.60,0.62];
 
 function emaArr(a,n){const k=2/(n+1),o=new Array(a.length);o[0]=a[0];for(let i=1;i<a.length;i++)o[i]=a[i]*k+o[i-1]*(1-k);return o;}
@@ -142,37 +143,65 @@ function buildInd(cs){
 function htf(ind,mins){
   const n=ind.n,H=mins*60000,map=new Int32Array(n).fill(-1),bars=[];let cur=null;
   for(let i=0;i<n;i++){const b=Math.floor(ind.t[i]/H);
-    if(!cur||cur.b!==b){cur={b,h:ind.h[i],l:ind.l[i],c:ind.c[i]};bars.push(cur);}
+    if(!cur||cur.b!==b){cur={b,o:ind.o[i],h:ind.h[i],l:ind.l[i],c:ind.c[i]};bars.push(cur);}
     else{if(ind.h[i]>cur.h)cur.h=ind.h[i];if(ind.l[i]<cur.l)cur.l=ind.l[i];cur.c=ind.c[i];}
     const k=bars.length-1;map[i]=ind.t[i]+ind.tf>=(b+1)*H?k:k-1;}
   const c=bars.map(x=>x.c),e12=emaArr(c,12),e26=emaArr(c,26),m=e12.map((v,j)=>v-e26[j]),sg=emaArr(m,9);
-  return {map,c,e20:emaArr(c,20),e50:emaArr(c,50),r:rsiArr(c,14),hist:m.map((v,j)=>v-sg[j]),atr:smaArr(bars.map(x=>x.h-x.l),14)};
+  return {map,c,o:bars.map(x=>x.o),h:bars.map(x=>x.h),l:bars.map(x=>x.l),e20:emaArr(c,20),e50:emaArr(c,50),r:rsiArr(c,14),hist:m.map((v,j)=>v-sg[j]),atr:smaArr(bars.map(x=>x.h-x.l),14)};
 }
 
-/* ---------- candle pattern engine (returns [name, direction] pairs) ---------- */
+/* ---------- candle pattern engine: [name, direction, base weight] ---------- */
 function patList(x,i){
+  if(i<6)return [];
   const {c,o,h,l,atr}=x,R=h[i]-l[i]+1e-12,body=Math.abs(c[i]-o[i]),uw=h[i]-Math.max(o[i],c[i]),lw=Math.min(o[i],c[i])-l[i],a=(atr[i]||R)+1e-12;
-  const up=k=>c[i-k]>o[i-k],dn=k=>c[i-k]<o[i-k],bd=k=>Math.abs(c[i-k]-o[i-k]),out=[];
-  if(dn(1)&&up(0)&&o[i]<=c[i-1]&&c[i]>=o[i-1])out.push(["Bullish engulfing",1]);
-  if(up(1)&&dn(0)&&o[i]>=c[i-1]&&c[i]<=o[i-1])out.push(["Bearish engulfing",-1]);
-  if(lw/R>=0.6&&body/R<=0.3&&uw/R<=0.15)out.push(["Hammer / bullish pin bar",1]);
-  if(uw/R>=0.6&&body/R<=0.3&&lw/R<=0.15)out.push(["Shooting star / bearish pin bar",-1]);
-  if(body/R>=0.85&&up(0))out.push(["Bullish marubozu",1]);
-  if(body/R>=0.85&&dn(0))out.push(["Bearish marubozu",-1]);
-  if(dn(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&up(0)&&c[i]>(o[i-2]+c[i-2])/2)out.push(["Morning star",1]);
-  if(up(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&dn(0)&&c[i]<(o[i-2]+c[i-2])/2)out.push(["Evening star",-1]);
-  if(up(0)&&up(1)&&up(2)&&c[i]>c[i-1]&&c[i-1]>c[i-2]&&o[i]>o[i-1]&&o[i-1]>o[i-2])out.push(["Three white soldiers",1]);
-  if(dn(0)&&dn(1)&&dn(2)&&c[i]<c[i-1]&&c[i-1]<c[i-2]&&o[i]<o[i-1]&&o[i-1]<o[i-2])out.push(["Three black crows",-1]);
-  if(Math.abs(l[i]-l[i-1])<=0.1*a&&dn(1)&&up(0))out.push(["Tweezer bottom",1]);
-  if(Math.abs(h[i]-h[i-1])<=0.1*a&&up(1)&&dn(0))out.push(["Tweezer top",-1]);
-  if(dn(1)&&up(0)&&o[i]>c[i-1]&&c[i]<o[i-1]&&body<bd(1))out.push(["Bullish harami",1]);
-  if(up(1)&&dn(0)&&o[i]<c[i-1]&&c[i]>o[i-1]&&body<bd(1))out.push(["Bearish harami",-1]);
-  if(dn(1)&&up(0)&&bd(1)>=0.5*a&&o[i]<=c[i-1]&&c[i]>(o[i-1]+c[i-1])/2&&c[i]<o[i-1])out.push(["Piercing line",1]);
-  if(up(1)&&dn(0)&&bd(1)>=0.5*a&&o[i]>=c[i-1]&&c[i]<(o[i-1]+c[i-1])/2&&c[i]>o[i-1])out.push(["Dark cloud cover",-1]);
-  if(body/R<=0.1)out.push(["Doji (indecision)",0]);
-  if(h[i]<=h[i-1]&&l[i]>=l[i-1])out.push(["Inside bar",0]);
+  const up=k=>c[i-k]>o[i-k],dn=k=>c[i-k]<o[i-k],bd=k=>Math.abs(c[i-k]-o[i-k]),out=[],P=(n,d,w)=>out.push([n,d,w]);
+  const prior=(c[i-1]-c[i-6])/a;                                   // move into this candle (trend context)
+  const engB=k=>dn(k+1)&&up(k)&&o[i-k]<=c[i-k-1]&&c[i-k]>=o[i-k-1],engS=k=>up(k+1)&&dn(k)&&o[i-k]>=c[i-k-1]&&c[i-k]<=o[i-k-1];
+  const harB=k=>dn(k+1)&&up(k)&&o[i-k]>=c[i-k-1]&&c[i-k]<o[i-k-1]&&bd(k)<0.6*bd(k+1),harS=k=>up(k+1)&&dn(k)&&o[i-k]<=c[i-k-1]&&c[i-k]>o[i-k-1]&&bd(k)<0.6*bd(k+1);
+  if(engB(0))P("Bullish engulfing",1,2);
+  if(engS(0))P("Bearish engulfing",-1,2);
+  if(lw/R>=0.6&&body/R<=0.3&&uw/R<=0.15){if(prior>0.5)P("Hanging man",-1,1.5);else P("Hammer / bullish pin bar",1,2);}
+  if(uw/R>=0.6&&body/R<=0.3&&lw/R<=0.15){if(prior<-0.5)P("Inverted hammer",1,1.5);else P("Shooting star / bearish pin bar",-1,2);}
+  if(body/R>=0.85&&up(0))P("Bullish marubozu",1,1);
+  if(body/R>=0.85&&dn(0))P("Bearish marubozu",-1,1);
+  if(dn(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&up(0)&&c[i]>(o[i-2]+c[i-2])/2)P("Morning star",1,3);
+  if(up(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&dn(0)&&c[i]<(o[i-2]+c[i-2])/2)P("Evening star",-1,3);
+  if(up(0)&&up(1)&&up(2)&&c[i]>c[i-1]&&c[i-1]>c[i-2]&&o[i]>o[i-1]&&o[i-1]>o[i-2])P("Three white soldiers",1,2);
+  if(dn(0)&&dn(1)&&dn(2)&&c[i]<c[i-1]&&c[i-1]<c[i-2]&&o[i]<o[i-1]&&o[i-1]<o[i-2])P("Three black crows",-1,2);
+  if(Math.abs(l[i]-l[i-1])<=0.1*a&&dn(1)&&up(0))P("Tweezer bottom",1,1.5);
+  if(Math.abs(h[i]-h[i-1])<=0.1*a&&up(1)&&dn(0))P("Tweezer top",-1,1.5);
+  if(harB(0))P("Bullish harami",1,1);
+  if(harS(0))P("Bearish harami",-1,1);
+  if(dn(1)&&up(0)&&bd(1)>=0.5*a&&o[i]<=c[i-1]&&c[i]>(o[i-1]+c[i-1])/2&&c[i]<o[i-1])P("Piercing line",1,2);
+  if(up(1)&&dn(0)&&bd(1)>=0.5*a&&o[i]>=c[i-1]&&c[i]<(o[i-1]+c[i-1])/2&&c[i]>o[i-1])P("Dark cloud cover",-1,2);
+  if(harB(1)&&up(0)&&c[i]>c[i-1]&&c[i]>o[i-2])P("Three inside up",1,2.5);
+  if(harS(1)&&dn(0)&&c[i]<c[i-1]&&c[i]<o[i-2])P("Three inside down",-1,2.5);
+  if(engB(1)&&up(0)&&c[i]>c[i-1])P("Three outside up",1,3);
+  if(engS(1)&&dn(0)&&c[i]<c[i-1])P("Three outside down",-1,3);
+  if(dn(1)&&up(0)&&bd(1)>=0.6*a&&body>=0.6*a&&o[i]>=o[i-1])P("Bullish kicker",1,3);
+  if(up(1)&&dn(0)&&bd(1)>=0.6*a&&body>=0.6*a&&o[i]<=o[i-1])P("Bearish kicker",-1,3);
+  if(h[i]>h[i-1]&&l[i]<l[i-1]&&prior<0&&up(0)&&c[i]>=h[i]-0.25*R)P("Bullish key reversal",1,2);
+  if(h[i]>h[i-1]&&l[i]<l[i-1]&&prior>0&&dn(0)&&c[i]<=l[i]+0.25*R)P("Bearish key reversal",-1,2);
+  const small=k=>bd(k)<=0.5*bd(4)&&h[i-k]<=h[i-4]&&l[i-k]>=l[i-4];
+  if(up(4)&&bd(4)>=0.7*a&&small(1)&&small(2)&&small(3)&&up(0)&&c[i]>c[i-4])P("Rising three methods",1,2.5);
+  if(dn(4)&&bd(4)>=0.7*a&&small(1)&&small(2)&&small(3)&&dn(0)&&c[i]<c[i-4])P("Falling three methods",-1,2.5);
+  if(body/R<=0.1){if(lw/R>=0.6&&uw/R<=0.1)P("Dragonfly doji",1,1.5);else if(uw/R>=0.6&&lw/R<=0.1)P("Gravestone doji",-1,1.5);else P("Doji (indecision)",0,0);}
+  if(h[i]<=h[i-1]&&l[i]>=l[i-1])P("Inside bar",0,0);
   return out;
 }
+/* pattern strength = base weight x location: at support/resistance, at a Bollinger band, at an RSI extreme */
+function patStrength(x,i,pl){
+  let bull=0,bear=0;const ctx=x.ll50&&!isNaN(x.ll50[i])&&!isNaN(x.lo[i]);
+  for(const p of pl){if(!p[1])continue;let m=1;
+    if(ctx){if(p[1]===1){if(x.l[i]-x.ll50[i]<=0.7*x.atr[i])m+=0.5;if(x.l[i]<=x.lo[i]||x.l[i-1]<=x.lo[i-1])m+=0.5;if(x.r14[i]<40)m+=0.5;}
+      else{if(x.hh50[i]-x.h[i]<=0.7*x.atr[i])m+=0.5;if(x.h[i]>=x.hi[i]||x.h[i-1]>=x.hi[i-1])m+=0.5;if(x.r14[i]>60)m+=0.5;}}
+    if(p[1]===1)bull+=p[2]*m;else bear+=p[2]*m;}
+  return {bull,bear};
+}
+/* candle patterns on the last CLOSED 15-minute candle */
+function htfPats(x,i){const H=x.h15,j=H.map[i];return j>=20?patList(H,j):[];}
+const PCLUSTER=["Strong bullish candle setup (score 4+)","Strong bearish candle setup (score 4+)"];
+function clusterDir(st){return st.bull>=4&&st.bull>=st.bear+3?1:st.bear>=4&&st.bear>=st.bull+3?-1:0;}
 const bullPat=(x,i)=>patList(x,i).some(p=>p[1]===1),bearPat=(x,i)=>patList(x,i).some(p=>p[1]===-1);
 
 /* ---------- strategy library (classic professional setups) ---------- */
@@ -227,6 +256,8 @@ function featRow(ind,i){
   const A=ind.h15,Bh=ind.h60,j1=A.map[i],j2=Bh.map[i];if(j1<20||j2<20)return null;
   const a1=A.atr[j1]+1e-12,a2=Bh.atr[j2]+1e-12;
   row.push((A.e20[j1]-A.e50[j1])/a1,A.r[j1]/100,A.hist[j1]/a1,(Bh.e20[j2]-Bh.e50[j2])/a2,Bh.r[j2]/100,(c[i]-Bh.e20[j2])/a2,4*ind.bbs[i]/a,ind.div[i]);
+  const st=patStrength(ind,i,pl),hp=patList(A,j1);let hb=0,hs=0;for(const p of hp){if(p[1]===1)hb+=p[2];else if(p[1]===-1)hs+=p[2];}
+  row.push(Math.min(st.bull,12)/6,Math.min(st.bear,12)/6,Math.min(hb,6)/3,Math.min(hs,6)/3);
   return row.every(Number.isFinite)?row:null;
 }
 function buildFeatures(cs,ind){ind=ind||buildInd(cs);const X=new Array(cs.length).fill(null);for(let i=210;i<cs.length;i++)X[i]=featRow(ind,i);return X;}
@@ -329,6 +360,15 @@ function validateAndTrain(cs,k,payout,strict,tf){
     const wr=n?w/n:0,low=wilsonLow(w,n,1.96),wrA=nA?wA/nA:0,wrB=nB?wB/nB:0;
     rules.push({id:R.id,name:R.name,n,wr,low,wrA,wrB,nA,nB,pass:n>=80&&low>be&&nA>=30&&nB>=30&&wrA>be&&wrB>be});
   }
+  /* how each candle pattern actually performed on THIS pair at THIS expiry */
+  const PS={},addP=(name,dir,win,older)=>{const q=PS[name]||(PS[name]={name,dir,n:0,w:0,nA:0,wA:0,nB:0,wB:0});q.n++;q.w+=win;if(older){q.nA++;q.wA+=win;}else{q.nB++;q.wB+=win;}};
+  rows.forEach((i,j)=>{
+    if(filterReason(ind,X,i,strict,tf))return;const pl=patList(ind,i),older=j<half;
+    for(const p of pl){if(!p[1])continue;addP(p[0],p[1],(p[1]===1&&y[i]===1)||(p[1]===-1&&y[i]===0)?1:0,older);}
+    const cd=clusterDir(patStrength(ind,i,pl));if(cd)addP(PCLUSTER[cd===1?0:1],cd,(cd===1&&y[i]===1)||(cd===-1&&y[i]===0)?1:0,older);
+  });
+  const pats=Object.values(PS).map(q=>{const wr=q.w/q.n,low=wilsonLow(q.w,q.n,1.64),wrA=q.nA?q.wA/q.nA:0,wrB=q.nB?q.wB/q.nB:0;
+    return Object.assign(q,{wr,low,wrA,wrB,pass:q.n>=50&&low>be&&q.nA>=15&&q.nB>=15&&wrA>be&&wrB>be});}).sort((p,q)=>q.n-p.n);
   const cut=Math.floor(rows.length*0.7),trainIdx=rows.slice(0,cut),lastTrain=trainIdx[trainIdx.length-1];
   const testIdx=rows.slice(cut).filter(i=>i>lastTrain+k);
   const mv=trainModel(X,y,trainIdx),ps=testIdx.map(i=>[predictG(mv.gb,X[i]),predictL(mv.lr,X[i])]);
@@ -341,7 +381,7 @@ function validateAndTrain(cs,k,payout,strict,tf){
       if(!bestRaw||wr>bestRaw.wr)bestRaw={wr,n,thr};
       if(low>be&&(!best||low>best.low))best={thr,n,wr,low};}
   }
-  const model=trainModel(X,y,rows),val={edge:!!best,be,testN:testIdx.length,rules,anyRule:rules.some(r=>r.pass),bestRaw};
+  const model=trainModel(X,y,rows),val={edge:!!best,be,testN:testIdx.length,rules,pats,anyRule:rules.some(r=>r.pass)||pats.some(q=>q.pass),bestRaw};
   if(best)Object.assign(val,{thr:best.thr,wr:best.wr,low:best.low,n:best.n,perDay:best.n/days(testIdx)});
   else val.note="no AI setting beat break-even with confidence";
   return {model,val};
@@ -362,10 +402,11 @@ function readout(x,i){
   for(const [nm,H] of [["15m",x.h15],["1h",x.h60]]){const j=H.map[i];if(j<1)continue;const u=H.e20[j]>H.e50[j]&&H.c[j]>H.e20[j],d=H.e20[j]<H.e50[j]&&H.c[j]<H.e20[j];
     add(nm+" trend",u?"Up":d?"Down":"Mixed",u?1:d?-1:0);}
   if(x.div[i])add("RSI divergence",x.div[i]>0?"bullish":"bearish",x.div[i]);
-  const pats=patList(x,i);
+  const pats=patList(x,i),str=patStrength(x,i,pats),hp=htfPats(x,i);
+  if(str.bull||str.bear)add("Candle strength",str.bull>=str.bear?"bull "+str.bull.toFixed(1):"bear "+str.bear.toFixed(1),str.bull>=str.bear+2?1:str.bear>=str.bull+2?-1:0);
   let bull=0,bear=0;items.forEach(q=>{if(q.dir===1)bull++;else if(q.dir===-1)bear++;});
   pats.forEach(p=>{if(p[1]===1)bull++;else if(p[1]===-1)bear++;});
-  return {items,pats,bull,bear};
+  return {items,pats,str,hp,bull,bear};
 }
 function decide(ind,X,i,model,val,strict,tf,force){
   const out={p:null,side:null,tier:null,srcs:[],off:null,lean:null,ro:null};
@@ -375,6 +416,8 @@ function decide(ind,X,i,model,val,strict,tf,force){
   const dirs=[],thr=val.edge?val.thr:0.58;let aiDir=0,ruleDir=0;
   if(val.edge||force){const v=aiVote(out.pg,out.pl,thr);if(v){dirs.push(v);aiDir=v;out.srcs.push("AI ensemble");}}
   for(const r of val.rules){if(!r.pass)continue;const d=RULES.find(q=>q.id===r.id).fn(ind,i);if(d){dirs.push(d);ruleDir=d;out.srcs.push(r.name);}}
+  const here=out.ro.pats.map(p=>p[0]),cd=clusterDir(out.ro.str);if(cd)here.push(PCLUSTER[cd===1?0:1]);
+  for(const q of (val.pats||[])){if(q.pass&&here.includes(q.name)){dirs.push(q.dir);ruleDir=q.dir;out.srcs.push(q.name+" ("+(q.wr*100).toFixed(0)+"% past)");}}
   if(!dirs.length||out.off)return out;
   if(dirs.some(d=>d!==dirs[0])){out.conflict=true;out.srcs=[];return out;}
   out.side=dirs[0]===1?"CALL":"PUT";out.tier=aiDir&&ruleDir?"A+":(aiDir?"A":"B");
@@ -445,7 +488,7 @@ function trainAsync(cs,k,payout,strict,tf){
 
 async function processPair(pair){
   const tf=TF(),k=KC[S.exp],hk=pair+"|"+tfm(),expected=Math.floor(Date.now()/tf)*tf-tf;
-  const mk=["v4",hk,k,S.strict?1:0,S.payout].join("|"),st=state[pair];
+  const mk=["v5",hk,k,S.strict?1:0,S.payout].join("|"),st=state[pair];
   if(st&&st.mk===mk&&!st.err&&st.t>=expected)return;                 // already analysed this candle: free
   let cs=null;
   if(hist[hk]){const c0=closedOf(hist[hk],tf);if(c0.length&&c0[c0.length-1].t>=expected)cs=c0;} // 5m history shared by 5, 10 and 15 min: free
@@ -540,12 +583,18 @@ function pairHtml(p){
   const rl=`<small class="${rp.length?"ok":"bad"}">Strategies proven: ${rp.length?rp.map(r=>`${r.name} (${pct(r.wr)}, ${r.n})`).join("; "):"none right now"}</small>`;
   const det=`<details><summary class="sm">All strategy tests</summary>${v.rules.map(r=>`<small>${r.pass?"PASS":"fail"} | ${r.name}: ${pct(r.wr)} on ${r.n} (older ${pct(r.wrA)}, newer ${pct(r.wrB)})</small>`).join("")}</details>`;
   const lean=d.lean?`AI lean ${d.lean.side} ${(d.lean.conf*100).toFixed(0)}% (trees ${(d.pg*100).toFixed(0)} / logistic ${(d.pl*100).toFixed(0)} up) | indicators ${d.ro.bull} bull / ${d.ro.bear} bear`:"";
-  const pats=d.ro.pats.length?`<small>Candle patterns: ${d.ro.pats.map(q=>q[0]).join(", ")}</small>`:`<small>Candle patterns: none on the last candle</small>`;
+  const ps=v.pats||[],stat=nm=>{const q=ps.find(z=>z.name===nm);return q?` (${pct(q.wr)} on ${q.n} past${q.pass?", PROVEN":""})`:"";};
+  const pats=`<small>Candle patterns (5m): ${d.ro.pats.length?d.ro.pats.map(q=>q[0]+stat(q[0])).join(", "):"none on the last candle"} | strength bull ${d.ro.str.bull.toFixed(1)} / bear ${d.ro.str.bear.toFixed(1)}</small>`
+    +`<small>Last 15m candle: ${d.ro.hp.length?d.ro.hp.map(q=>q[0]).join(", "):"no pattern"}</small>`;
+  const pp=ps.filter(q=>q.pass);
+  const pl=`<small class="${pp.length?"ok":"bad"}">Candle patterns proven here: ${pp.length?pp.map(q=>`${q.name} (${pct(q.wr)}, ${q.n})`).join("; "):"none right now"}</small>`;
+  const pdet=`<details><summary class="sm">Candle pattern history (${S.exp} min)</summary>${ps.map(q=>`<small>${q.pass?"PASS":"fail"} | ${q.dir>0?"▲":"▼"} ${q.name}: ${pct(q.wr)} on ${q.n} (older ${pct(q.wrA)}, newer ${pct(q.wrB)})</small>`).join("")||"<small>none yet</small>"}</details>`;
   return `<div class="card"><div class="top"><div><b>${p}</b><small>${s.price} | ${lean}</small></div><span class="tag ${cls}">${tag}</span></div>
-   <div class="chips2">${chipsHtml(d.ro)}</div>${pats}${d.side?`<small class="ok">Validated signal, quality ${d.tier}: ${d.srcs.join(" + ")}</small>`:""}${ai}${rl}${det}</div>`;
+   <div class="chips2">${chipsHtml(d.ro)}</div>${pats}${d.side?`<small class="ok">Validated signal, quality ${d.tier}: ${d.srcs.join(" + ")}</small>`:""}${ai}${rl}${pl}${det}${pdet}</div>`;
 }
 function reasonsFor(c){const side=c.v.side==="CALL"?1:-1,r=[];
-  c.s.d.ro.items.forEach(q=>{if(q.dir===side)r.push(q.k+" "+q.txt);});c.s.d.ro.pats.forEach(q=>{if(q[1]===side)r.push(q[0]);});return r;}
+  c.s.d.ro.pats.forEach(q=>{if(q[1]===side)r.push(q[0]);});c.s.d.ro.hp.forEach(q=>{if(q[1]===side)r.push("15m "+q[0]);});
+  c.s.d.ro.items.forEach(q=>{if(q.dir===side)r.push(q.k+" "+q.txt);});return r;}
 function bannerHtml(){
   const b=$("banner"),c=pickSetup(),now=Date.now();
   if(!c){const tf=TF(),nxt=Math.ceil(now/tf)*tf;b.className="";

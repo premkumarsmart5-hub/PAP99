@@ -43,7 +43,7 @@ iframe{width:100%;height:340px;border:0;border-radius:10px;background:#000}
 summary{cursor:pointer;font-weight:700;padding:8px 0}
 </style></head>
 <body>
-<h1>AI Trader (signals only, UAE time)</h1>
+<h1>AI Trader: IQ Option signals, 5 / 10 / 15 min (UAE time)</h1>
 
 <div id="setup">
   <p class="note">1) Free API key from twelvedata.com. 2) Paste it, choose your IQ Option payout, tap Start. Keep the screen on.</p>
@@ -54,7 +54,7 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
 </div>
 
 <div id="main" style="display:none">
-  <div id="seg"><button data-e="2">2 min</button><button data-e="5">5 min</button><button data-e="10">10 min</button></div>
+  <div id="seg"><button data-e="5">5 min</button><button data-e="10">10 min</button><button data-e="15">15 min</button></div>
   <div id="banner"></div>
   <div id="clock"></div>
   <div class="grid">
@@ -80,12 +80,13 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
   <button id="stop" style="background:#27324a">Change API key</button>
 </div>
 
-<p class="note">How it works: for each pair the app downloads about 5000 candles and reads 37 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger, EMAs, 15 candle patterns, support and resistance, time of day). A tree-boosting AI trained in the background predicts the next move, and 8 classic strategies are tested alongside it. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
+<p class="note">How it works: for each pair the app downloads about 5000 five-minute candles and reads 45 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger squeeze, EMAs, RSI divergence, 17 candle patterns, support and resistance, 15-minute and 1-hour trend, time of day). Two AI models trained in the background (gradient-boosted trees + logistic regression) must agree on the direction for the chosen expiry (5, 10 or 15 min), and 10 classic strategies are tested alongside them. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
 
 <script id="core">
 /* ===== CORE: indicators, candle patterns, strategy library, tree-boosting AI, validation ===== */
 const FN=["ret1","ret2","ret3","ret5","ret10","ret20","rsi14","rsi7","d20","d50","spread","pctb","vol_ratio","rng_atr","body","upw","lw","stoch",
- "hr_sin","hr_cos","macd_h","macd_d","stK","stD","adx","di_diff","cci","aroon","d_hh50","d_ll50","d200","slope200","bull_pats","bear_pats","doji","inside","consec"];
+ "hr_sin","hr_cos","macd_h","macd_d","stK","stD","adx","di_diff","cci","aroon","d_hh50","d_ll50","d200","slope200","bull_pats","bear_pats","doji","inside","consec",
+ "h15_trend","h15_rsi","h15_macd","h60_trend","h60_rsi","h60_dist","squeeze","rsi_div"];
 const THR=[0.53,0.54,0.55,0.56,0.58,0.60,0.62];
 
 function emaArr(a,n){const k=2/(n+1),o=new Array(a.length);o[0]=a[0];for(let i=1;i<a.length;i++)o[i]=a[i]*k+o[i-1]*(1-k);return o;}
@@ -128,7 +129,24 @@ function buildInd(cs){
     a=-Infinity;b=Infinity;for(let j=i-50;j<i;j++){if(h[j]>a)a=h[j];if(l[j]<b)b=l[j];}hh50[i]=a;ll50[i]=b;
   }
   ind.au=au;ind.ad=ad;ind.hh20=hh20;ind.ll20=ll20;ind.hh50=hh50;ind.ll50=ll50;
+  let tf=Infinity;for(let i=1;i<Math.min(n,80);i++){const d=ind.t[i]-ind.t[i-1];if(d>0&&d<tf)tf=d;}ind.tf=isFinite(tf)?tf:300000;
+  /* RSI divergence: price makes a new 10-candle extreme but RSI does not */
+  const dv=new Array(n).fill(0);
+  for(let i=15;i<n;i++){let jl=i-12,jh=i-12;for(let j=i-12;j<=i-3;j++){if(l[j]<l[jl])jl=j;if(h[j]>h[jh])jh=j;}
+    if(l[i]<l[jl]&&ind.r14[i]>ind.r14[jl]+2)dv[i]=1;else if(h[i]>h[jh]&&ind.r14[i]<ind.r14[jh]-2)dv[i]=-1;}
+  ind.div=dv;
+  ind.h15=htf(ind,15);ind.h60=htf(ind,60);
   return ind;
+}
+/* higher-timeframe view built from the same candles (no extra credits, no look-ahead: only CLOSED higher candles are used) */
+function htf(ind,mins){
+  const n=ind.n,H=mins*60000,map=new Int32Array(n).fill(-1),bars=[];let cur=null;
+  for(let i=0;i<n;i++){const b=Math.floor(ind.t[i]/H);
+    if(!cur||cur.b!==b){cur={b,h:ind.h[i],l:ind.l[i],c:ind.c[i]};bars.push(cur);}
+    else{if(ind.h[i]>cur.h)cur.h=ind.h[i];if(ind.l[i]<cur.l)cur.l=ind.l[i];cur.c=ind.c[i];}
+    const k=bars.length-1;map[i]=ind.t[i]+ind.tf>=(b+1)*H?k:k-1;}
+  const c=bars.map(x=>x.c),e12=emaArr(c,12),e26=emaArr(c,26),m=e12.map((v,j)=>v-e26[j]),sg=emaArr(m,9);
+  return {map,c,e20:emaArr(c,20),e50:emaArr(c,50),r:rsiArr(c,14),hist:m.map((v,j)=>v-sg[j]),atr:smaArr(bars.map(x=>x.h-x.l),14)};
 }
 
 /* ---------- candle pattern engine (returns [name, direction] pairs) ---------- */
@@ -149,6 +167,8 @@ function patList(x,i){
   if(Math.abs(h[i]-h[i-1])<=0.1*a&&up(1)&&dn(0))out.push(["Tweezer top",-1]);
   if(dn(1)&&up(0)&&o[i]>c[i-1]&&c[i]<o[i-1]&&body<bd(1))out.push(["Bullish harami",1]);
   if(up(1)&&dn(0)&&o[i]<c[i-1]&&c[i]>o[i-1]&&body<bd(1))out.push(["Bearish harami",-1]);
+  if(dn(1)&&up(0)&&bd(1)>=0.5*a&&o[i]<=c[i-1]&&c[i]>(o[i-1]+c[i-1])/2&&c[i]<o[i-1])out.push(["Piercing line",1]);
+  if(up(1)&&dn(0)&&bd(1)>=0.5*a&&o[i]>=c[i-1]&&c[i]<(o[i-1]+c[i-1])/2&&c[i]>o[i-1])out.push(["Dark cloud cover",-1]);
   if(body/R<=0.1)out.push(["Doji (indecision)",0]);
   if(h[i]<=h[i-1]&&l[i]>=l[i-1])out.push(["Inside bar",0]);
   return out;
@@ -180,7 +200,14 @@ const RULES=[
    if(x.adx[i]>25&&x.mdi[i]>x.pdi[i]&&x.c[i]<x.ll20[i]&&x.c[i]<x.o[i])return -1;return 0;}},
  {id:"cci",name:"CCI +/-100 snap-back",fn:(x,i)=>{
    if(x.cci[i-1]<-100&&x.cci[i]>=-100&&x.c[i]>x.o[i])return 1;
-   if(x.cci[i-1]>100&&x.cci[i]<=100&&x.c[i]<x.o[i])return -1;return 0;}}
+   if(x.cci[i-1]>100&&x.cci[i]<=100&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"mtf",name:"15m + 1h trend with RSI pullback",fn:(x,i)=>{const a=x.h15,b=x.h60,j=a.map[i],k=b.map[i];if(j<1||k<1)return 0;
+   const up=a.e20[j]>a.e50[j]&&b.e20[k]>b.e50[k],dn=a.e20[j]<a.e50[j]&&b.e20[k]<b.e50[k];
+   if(up&&x.r14[i-1]<45&&x.r14[i]>=45&&x.c[i]>x.o[i])return 1;
+   if(dn&&x.r14[i-1]>55&&x.r14[i]<=55&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"div",name:"RSI divergence reversal",fn:(x,i)=>{
+   if((x.div[i]===1||x.div[i-1]===1)&&x.c[i]>x.o[i]&&x.c[i]<x.bbm[i])return 1;
+   if((x.div[i]===-1||x.div[i-1]===-1)&&x.c[i]<x.o[i]&&x.c[i]>x.bbm[i])return -1;return 0;}}
 ];
 
 function featRow(ind,i){
@@ -197,12 +224,15 @@ function featRow(ind,i){
     Math.max(-3,Math.min(3,ind.cci[i]/100)),(ind.au[i]-ind.ad[i])/100,(ind.hh50[i]-c[i])/a,(c[i]-ind.ll50[i])/a,
     (c[i]-ind.e200[i])/a,(ind.e200[i]-ind.e200[i-10])/a,
     pl.filter(p=>p[1]===1).length,pl.filter(p=>p[1]===-1).length,pl.some(p=>p[0].startsWith("Doji"))?1:0,pl.some(p=>p[0]==="Inside bar")?1:0,cons/5];
+  const A=ind.h15,Bh=ind.h60,j1=A.map[i],j2=Bh.map[i];if(j1<20||j2<20)return null;
+  const a1=A.atr[j1]+1e-12,a2=Bh.atr[j2]+1e-12;
+  row.push((A.e20[j1]-A.e50[j1])/a1,A.r[j1]/100,A.hist[j1]/a1,(Bh.e20[j2]-Bh.e50[j2])/a2,Bh.r[j2]/100,(c[i]-Bh.e20[j2])/a2,4*ind.bbs[i]/a,ind.div[i]);
   return row.every(Number.isFinite)?row:null;
 }
 function buildFeatures(cs,ind){ind=ind||buildInd(cs);const X=new Array(cs.length).fill(null);for(let i=210;i<cs.length;i++)X[i]=featRow(ind,i);return X;}
-/* fast live path: only the newest candle is analysed, on the last 700 candles */
+/* fast live path: only the newest candle is analysed, on the last 2000 candles */
 function analyseLast(cs,model,val,strict,tf,force){
-  const w=cs.length>700?cs.slice(-700):cs,ind=buildInd(w),i=w.length-1,X=[];X[i]=featRow(ind,i);
+  const w=cs.length>2000?cs.slice(-2000):cs,ind=buildInd(w),i=w.length-1,X=[];X[i]=featRow(ind,i);
   return decide(ind,X,i,model,val,strict,tf,force);
 }
 function labelsArr(cs,k){const n=cs.length,y=new Array(n).fill(-2);
@@ -260,9 +290,27 @@ function trainTrees(X,y,idx,R=100,lr=0.1,lam=5,minLeaf=50,nb=16){
   }
   return {base,trees};
 }
-function predictP(model,x){let F=model.base;
+function predictG(model,x){let F=model.base;
   for(const t of model.trees){let nd=x[t.f]<t.thr?t.l:t.r;if(typeof nd==="object")nd=x[nd.f]<nd.thr?nd.l:nd.r;F+=nd;}
   return 1/(1+Math.exp(-F));}
+/* ---------- AI #2: regularised logistic regression (smooth linear view of all indicators) ---------- */
+function trainLR(X,y,idx,it=300,lr=0.3,l2=2e-3){
+  const F=X[idx[0]].length,m=idx.length,mu=new Float64Array(F),sd=new Float64Array(F),Z=new Float64Array(m*F),yy=new Float64Array(m);
+  for(let j=0;j<m;j++){const r=X[idx[j]];yy[j]=y[idx[j]];for(let f=0;f<F;f++)mu[f]+=r[f]/m;}
+  for(let j=0;j<m;j++){const r=X[idx[j]];for(let f=0;f<F;f++)sd[f]+=(r[f]-mu[f])**2/m;}
+  for(let f=0;f<F;f++)sd[f]=Math.sqrt(sd[f])+1e-9;
+  for(let j=0;j<m;j++){const r=X[idx[j]];for(let f=0;f<F;f++)Z[j*F+f]=Math.max(-5,Math.min(5,(r[f]-mu[f])/sd[f]));}
+  const w=new Float64Array(F),gw=new Float64Array(F),mean=yy.reduce((a,b)=>a+b,0)/m;let b=Math.log(mean/(1-mean));
+  for(let t=0;t<it;t++){gw.fill(0);let gb=0;
+    for(let j=0;j<m;j++){let s=b;const o=j*F;for(let f=0;f<F;f++)s+=w[f]*Z[o+f];const e=1/(1+Math.exp(-s))-yy[j];gb+=e;for(let f=0;f<F;f++)gw[f]+=e*Z[o+f];}
+    for(let f=0;f<F;f++)w[f]-=lr*(gw[f]/m+l2*w[f]);b-=lr*gb/m;}
+  return {mu,sd,w,b};
+}
+function predictL(m,x){let s=m.b;for(let f=0;f<x.length;f++)s+=m.w[f]*Math.max(-5,Math.min(5,(x[f]-m.mu[f])/m.sd[f]));return 1/(1+Math.exp(-s));}
+function trainModel(X,y,idx){return {gb:trainTrees(X,y,idx,150),lr:trainLR(X,y,idx)};}
+/* ensemble vote: both AIs must point the same way and their average must clear the threshold */
+function aiVote(g,l,thr){const p=(g+l)/2;if(p>=thr&&g>0.5&&l>0.5)return 1;if(p<=1-thr&&g<0.5&&l<0.5)return -1;return 0;}
+function predictP(model,x){return (predictG(model.gb,x)+predictL(model.lr,x))/2;}
 
 /* ---------- walk-forward validation ---------- */
 function validateAndTrain(cs,k,payout,strict,tf){
@@ -283,17 +331,17 @@ function validateAndTrain(cs,k,payout,strict,tf){
   }
   const cut=Math.floor(rows.length*0.7),trainIdx=rows.slice(0,cut),lastTrain=trainIdx[trainIdx.length-1];
   const testIdx=rows.slice(cut).filter(i=>i>lastTrain+k);
-  const mv=trainTrees(X,y,trainIdx),ps=testIdx.map(i=>predictP(mv,X[i]));
+  const mv=trainModel(X,y,trainIdx),ps=testIdx.map(i=>[predictG(mv.gb,X[i]),predictL(mv.lr,X[i])]);
   let best=null,bestRaw=null;
   for(const thr of THR){
     let n=0,w=0;
-    testIdx.forEach((i,j)=>{if(filterReason(ind,X,i,strict,tf))return;const p=ps[j];
-      if(p>=thr){n++;if(y[i]===1)w++;}else if(p<=1-thr){n++;if(y[i]===0)w++;}});
+    testIdx.forEach((i,j)=>{if(filterReason(ind,X,i,strict,tf))return;const v=aiVote(ps[j][0],ps[j][1],thr);
+      if(v===1){n++;if(y[i]===1)w++;}else if(v===-1){n++;if(y[i]===0)w++;}});
     if(n>=100){const wr=w/n,low=wilsonLow(w,n,2.33);
       if(!bestRaw||wr>bestRaw.wr)bestRaw={wr,n,thr};
       if(low>be&&(!best||low>best.low))best={thr,n,wr,low};}
   }
-  const model=trainTrees(X,y,rows),val={edge:!!best,be,testN:testIdx.length,rules,anyRule:rules.some(r=>r.pass),bestRaw};
+  const model=trainModel(X,y,rows),val={edge:!!best,be,testN:testIdx.length,rules,anyRule:rules.some(r=>r.pass),bestRaw};
   if(best)Object.assign(val,{thr:best.thr,wr:best.wr,low:best.low,n:best.n,perDay:best.n/days(testIdx)});
   else val.note="no AI setting beat break-even with confidence";
   return {model,val};
@@ -311,6 +359,9 @@ function readout(x,i){
   const cc=x.cci[i];add("CCI",cc.toFixed(0),cc<-100?1:cc>100?-1:0);
   const pb=(x.c[i]-x.lo[i])/(x.hi[i]-x.lo[i]+1e-12);add("Bollinger",(pb*100).toFixed(0)+"%",pb<0.1?1:pb>0.9?-1:0);
   const ao=x.au[i]-x.ad[i];add("Aroon",ao.toFixed(0),ao>50?1:ao<-50?-1:0);
+  for(const [nm,H] of [["15m",x.h15],["1h",x.h60]]){const j=H.map[i];if(j<1)continue;const u=H.e20[j]>H.e50[j]&&H.c[j]>H.e20[j],d=H.e20[j]<H.e50[j]&&H.c[j]<H.e20[j];
+    add(nm+" trend",u?"Up":d?"Down":"Mixed",u?1:d?-1:0);}
+  if(x.div[i])add("RSI divergence",x.div[i]>0?"bullish":"bearish",x.div[i]);
   const pats=patList(x,i);
   let bull=0,bear=0;items.forEach(q=>{if(q.dir===1)bull++;else if(q.dir===-1)bear++;});
   pats.forEach(p=>{if(p[1]===1)bull++;else if(p[1]===-1)bear++;});
@@ -319,10 +370,10 @@ function readout(x,i){
 function decide(ind,X,i,model,val,strict,tf,force){
   const out={p:null,side:null,tier:null,srcs:[],off:null,lean:null,ro:null};
   const x=X[i];if(!x||!model)return out;
-  out.p=predictP(model,x);out.off=filterReason(ind,X,i,strict,tf);out.ro=readout(ind,i);
+  out.pg=predictG(model.gb,x);out.pl=predictL(model.lr,x);out.p=(out.pg+out.pl)/2;out.off=filterReason(ind,X,i,strict,tf);out.ro=readout(ind,i);
   out.lean={side:out.p>=0.5?"CALL":"PUT",conf:Math.max(out.p,1-out.p)};
   const dirs=[],thr=val.edge?val.thr:0.58;let aiDir=0,ruleDir=0;
-  if(val.edge||force){if(out.p>=thr){dirs.push(1);aiDir=1;out.srcs.push("AI");}else if(out.p<=1-thr){dirs.push(-1);aiDir=-1;out.srcs.push("AI");}}
+  if(val.edge||force){const v=aiVote(out.pg,out.pl,thr);if(v){dirs.push(v);aiDir=v;out.srcs.push("AI ensemble");}}
   for(const r of val.rules){if(!r.pass)continue;const d=RULES.find(q=>q.id===r.id).fn(ind,i);if(d){dirs.push(d);ruleDir=d;out.srcs.push(r.name);}}
   if(!dirs.length||out.off)return out;
   if(dirs.some(d=>d!==dirs[0])){out.conflict=true;out.srcs=[];return out;}
@@ -334,12 +385,13 @@ function decide(ind,X,i,model,val,strict,tf,force){
 <script>
 /* ===== APP ===== */
 const $=id=>document.getElementById(id);
-const ALL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD"];
-const TV={"EUR/USD":"FX:EURUSD","GBP/USD":"FX:GBPUSD","USD/JPY":"FX:USDJPY","AUD/USD":"FX:AUDUSD","USD/CAD":"FX:USDCAD"};
-const TFMIN={2:1,5:5,10:5},KC={2:2,5:1,10:2},WIN={2:20,5:40,10:40}; // candle size (min), candles ahead, entry window (sec)
+const ALL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY","GBP/JPY","EUR/GBP","NZD/USD","AUD/JPY"];
+const TV=Object.fromEntries(ALL.map(p=>[p,"FX:"+p.replace("/","")]));
+const TFMIN={5:5,10:5,15:5},KC={5:1,10:2,15:3},WIN={5:40,10:40,15:40}; // candle size (min), candles ahead, entry window (sec)
 const CAP=760;
 let S={key:"",exp:5,pairs:["EUR/USD","GBP/USD","USD/JPY"],strict:true,payout:85,auto:true};
 try{Object.assign(S,JSON.parse(localStorage.getItem("ap_set")||"{}"));}catch(e){}
+if(!TFMIN[S.exp])S.exp=5;S.pairs=S.pairs.filter(p=>ALL.includes(p));if(!S.pairs.length)S.pairs=["EUR/USD"];
 const save=()=>{try{localStorage.setItem("ap_set",JSON.stringify(S));}catch(e){}};
 let LOG=[];try{LOG=JSON.parse(localStorage.getItem("ap_log")||"[]");}catch(e){}
 const saveLog=()=>{try{localStorage.setItem("ap_log",JSON.stringify(LOG.slice(-150)));}catch(e){}};
@@ -393,10 +445,10 @@ function trainAsync(cs,k,payout,strict,tf){
 
 async function processPair(pair){
   const tf=TF(),k=KC[S.exp],hk=pair+"|"+tfm(),expected=Math.floor(Date.now()/tf)*tf-tf;
-  const mk=["v3",hk,k,S.strict?1:0,S.payout].join("|"),st=state[pair];
+  const mk=["v4",hk,k,S.strict?1:0,S.payout].join("|"),st=state[pair];
   if(st&&st.mk===mk&&!st.err&&st.t>=expected)return;                 // already analysed this candle: free
   let cs=null;
-  if(hist[hk]){const c0=closedOf(hist[hk],tf);if(c0.length&&c0[c0.length-1].t>=expected)cs=c0;} // 5m history reused for 5 and 10 min: free
+  if(hist[hk]){const c0=closedOf(hist[hk],tf);if(c0.length&&c0[c0.length-1].t>=expected)cs=c0;} // 5m history shared by 5, 10 and 15 min: free
   if(!cs){
     for(let attempt=0;attempt<3;attempt++){
       if(used()>=CAP)throw new Error("CAP");
@@ -487,7 +539,7 @@ function pairHtml(p){
   const rp=v.rules.filter(r=>r.pass);
   const rl=`<small class="${rp.length?"ok":"bad"}">Strategies proven: ${rp.length?rp.map(r=>`${r.name} (${pct(r.wr)}, ${r.n})`).join("; "):"none right now"}</small>`;
   const det=`<details><summary class="sm">All strategy tests</summary>${v.rules.map(r=>`<small>${r.pass?"PASS":"fail"} | ${r.name}: ${pct(r.wr)} on ${r.n} (older ${pct(r.wrA)}, newer ${pct(r.wrB)})</small>`).join("")}</details>`;
-  const lean=d.lean?`AI lean ${d.lean.side} ${(d.lean.conf*100).toFixed(0)}% | indicators ${d.ro.bull} bull / ${d.ro.bear} bear`:"";
+  const lean=d.lean?`AI lean ${d.lean.side} ${(d.lean.conf*100).toFixed(0)}% (trees ${(d.pg*100).toFixed(0)} / logistic ${(d.pl*100).toFixed(0)} up) | indicators ${d.ro.bull} bull / ${d.ro.bear} bear`:"";
   const pats=d.ro.pats.length?`<small>Candle patterns: ${d.ro.pats.map(q=>q[0]).join(", ")}</small>`:`<small>Candle patterns: none on the last candle</small>`;
   return `<div class="card"><div class="top"><div><b>${p}</b><small>${s.price} | ${lean}</small></div><span class="tag ${cls}">${tag}</span></div>
    <div class="chips2">${chipsHtml(d.ro)}</div>${pats}${d.side?`<small class="ok">Validated signal, quality ${d.tier}: ${d.srcs.join(" + ")}</small>`:""}${ai}${rl}${det}</div>`;
@@ -502,6 +554,7 @@ function bannerHtml(){
   b.className=c.v.side.toLowerCase()+(c.v.validated?"":" unv");
   b.innerHTML=`<div class="big">${c.pair}  ${c.v.side==="CALL"?"CALL ▲":"PUT ▼"}</div>
    <div class="line">Entry <b>${uS(closeT)}</b> UAE | Expiry <b>${uS(expiryAt)}</b> UAE (${S.exp} min)</div>
+   <div class="line">In IQ Option: ${c.pair.replace("/","")}, tap ${c.v.side==="CALL"?"HIGHER":"LOWER"}, set expiry to <b>${uM(expiryAt)}</b></div>
    <div class="line">Confidence ${(c.v.conf*100).toFixed(0)}% | ${c.v.validated?`VALIDATED, quality ${c.s.d.tier}`:"NOT VALIDATED, demo only"}</div>
    <div class="line">${rs.length?"Why: "+rs.slice(0,6).join(", "):"Mixed signals, weak setup"}</div>
    <div class="line">Entry window closes in <b>${mmss(left)}</b></div>
@@ -516,7 +569,7 @@ function logHtml(){
 function render(){
   $("pairs").innerHTML=S.pairs.map(pairHtml).join("");
   const ph=Math.round(S.pairs.length*60/tfm());
-  $("credit").textContent=`About ${ph} credits per hour while running (free limit 800/day).`+(ph>150?" That is high: use fewer pairs or the 5 or 10 minute expiry.":"");
+  $("credit").textContent=`About ${ph} credits per hour while running (free limit 800/day).`+(ph>70?" That is high for the free plan (~"+Math.floor(800/ph)+" hours/day): tick fewer pairs.":"");
   document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",+b.dataset.e===S.exp));
   bannerHtml();logHtml();
 }
@@ -524,7 +577,7 @@ function tick(){
   const tf=TF(),now=Date.now(),nxt=Math.ceil(now/tf)*tf,left=Math.ceil((nxt-now)/1000);
   $("clock").innerHTML=`UAE <b>${uS(now)}</b> | next ${tfm()}m candle opens <b>${uS(nxt)}</b> in ${mmss(left)}`;bannerHtml();
 }
-function setChart(){const pair=$("chartPair").value,iv=S.exp===2?"1":"5";
+function setChart(){const pair=$("chartPair").value,iv=S.exp===15?"15":"5";
   $("tv").src=`https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(TV[pair])}&interval=${iv}&theme=dark&style=1&timezone=Asia%2FDubai&hidesidetoolbar=1&withdateranges=0&saveimage=0&locale=en`;}
 function drawChips(){
   $("chips").innerHTML=ALL.map(p=>`<label><input type="checkbox" data-p="${p}" ${S.pairs.includes(p)?"checked":""}> ${p}</label>`).join("");

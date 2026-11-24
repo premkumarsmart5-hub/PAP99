@@ -55,3 +55,13 @@ Tap **Find best expiry** to compare 5, 10 and 15 minutes on every ticked pair.
   * Proven history
 * Each part has its own bar that shows which way it points, so you can see why a pair says CALL or PUT.
 * All animations are switched off if your phone is set to reduce motion.
+
+## Security
+* **Your API key stays on your phone.** It is sent only to `api.twelvedata.com` over HTTPS. It is hidden while you type, and there is a **Show** button.
+* **Remember key on this phone** can be unticked on a shared phone. The key is then kept only until the browser tab closes.
+* **Forget key and data** wipes the key, the trade log, the settings and the offline cache from the phone.
+* **Content Security Policy:** the page may only connect to itself and Twelve Data, and may only embed TradingView charts. Even if bad code got in, it could not send your key anywhere else.
+* All text from the data service is escaped before it is shown. Downloaded candles and saved data are checked before use.
+* The TradingView chart runs in a sandbox and is not told your page address (no-referrer).
+* The offline cache stores only this app's own files, never API responses.
+* In GitHub, keep **Settings → Pages → Enforce HTTPS** ticked.

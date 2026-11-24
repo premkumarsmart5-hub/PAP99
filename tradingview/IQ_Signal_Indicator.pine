@@ -1,0 +1,164 @@
+//@version=5
+// IQ Option Binary Signal Indicator (5 / 10 / 15 min expiry)
+// Confluence of trend, momentum, volatility, candle patterns and higher-timeframe trend.
+// Signals are only confirmed at candle close (no repainting). Enter at the open of the NEXT candle.
+// The on-chart table shows how past signals on THIS chart actually performed at your expiry.
+// Nothing guarantees wins: trade on demo until the table shows a win rate above break-even.
+indicator("IQ Option Signals 5/10/15m", shorttitle="IQ Signals", overlay=true, max_labels_count=500)
+
+// ---------- inputs ----------
+expiryMin  = input.int(5, "Expiry (minutes)", options=[5, 10, 15])
+minScore   = input.int(5, "Minimum confluence score (higher = fewer, stronger signals)", minval=3, maxval=10)
+payoutPct  = input.int(85, "IQ Option payout %", minval=50, maxval=100)
+useHTF     = input.bool(true, "Require 15m and 1h trend agreement")
+useSession = input.bool(true, "Only trade London / New York hours (07:00-16:00 UTC)")
+skipVol    = input.bool(true, "Skip abnormally volatile candles")
+showLabels = input.bool(true, "Show CALL / PUT labels")
+
+// ---------- core indicators ----------
+e20 = ta.ema(close, 20)
+e50 = ta.ema(close, 50)
+e200 = ta.ema(close, 200)
+rsi = ta.rsi(close, 14)
+k = ta.sma(ta.stoch(close, high, low, 14), 3)
+d = ta.sma(k, 3)
+[macdLine, sigLine, hist] = ta.macd(close, 12, 26, 9)
+[bbMid, bbUp, bbLo] = ta.bb(close, 20, 2)
+[diPlus, diMinus, adx] = ta.dmi(14, 14)
+cci = ta.cci(hlc3, 20)
+atr = ta.atr(14)
+kUp = ta.crossover(k, d)
+kDn = ta.crossunder(k, d)
+ll50 = ta.lowest(low, 50)[1]
+hh50 = ta.highest(high, 50)[1]
+
+// higher timeframes: previous CLOSED candle only (non-repainting)
+htfTrend(tf) =>
+    request.security(syminfo.tickerid, tf, ta.ema(close, 20)[1] > ta.ema(close, 50)[1] ? 1 : ta.ema(close, 20)[1] < ta.ema(close, 50)[1] ? -1 : 0, lookahead=barmerge.lookahead_on)
+t15 = htfTrend("15")
+t60 = htfTrend("60")
+
+// ---------- candle patterns ----------
+rng = math.max(high - low, syminfo.mintick)
+body = math.abs(close - open)
+upW = high - math.max(open, close)
+loW = math.min(open, close) - low
+bull0 = close > open
+bear0 = close < open
+bull1 = close[1] > open[1]
+bear1 = close[1] < open[1]
+bullEngulf = bear1 and bull0 and open <= close[1] and close >= open[1]
+bearEngulf = bull1 and bear0 and open >= close[1] and close <= open[1]
+hammer = loW / rng >= 0.6 and body / rng <= 0.3 and upW / rng <= 0.15
+star = upW / rng >= 0.6 and body / rng <= 0.3 and loW / rng <= 0.15
+morning = close[2] < open[2] and math.abs(close[2] - open[2]) >= 0.6 * atr and math.abs(close[1] - open[1]) <= 0.3 * math.abs(close[2] - open[2]) and bull0 and close > (open[2] + close[2]) / 2
+evening = close[2] > open[2] and math.abs(close[2] - open[2]) >= 0.6 * atr and math.abs(close[1] - open[1]) <= 0.3 * math.abs(close[2] - open[2]) and bear0 and close < (open[2] + close[2]) / 2
+piercing = bear1 and bull0 and math.abs(close[1] - open[1]) >= 0.5 * atr and close > (open[1] + close[1]) / 2 and close < open[1]
+darkCloud = bull1 and bear0 and math.abs(close[1] - open[1]) >= 0.5 * atr and close < (open[1] + close[1]) / 2 and close > open[1]
+bullPat = bullEngulf or hammer or morning or piercing
+bearPat = bearEngulf or star or evening or darkCloud
+
+// RSI divergence (new 10-bar extreme without RSI confirmation)
+pl = ta.lowest(low, 10)[3]
+ph = ta.highest(high, 10)[3]
+rsiAtLow = rsi[3 + math.abs(nz(ta.lowestbars(low, 10)[3]))]
+rsiAtHigh = rsi[3 + math.abs(nz(ta.highestbars(high, 10)[3]))]
+bullDiv = low < pl and rsi > rsiAtLow + 2
+bearDiv = high > ph and rsi < rsiAtHigh - 2
+
+// ---------- confluence score ----------
+bullScore = 0
+bullScore += e20 > e50 ? 1 : 0
+bullScore += rsi < 35 or (rsi[1] < 45 and rsi >= 45) ? 1 : 0
+bullScore += k < 25 and kUp ? 1 : 0
+bullScore += hist > hist[1] ? 1 : 0
+bullScore += adx > 20 and diPlus > diMinus ? 1 : 0
+bullScore += cci[1] < -100 and cci >= -100 ? 1 : 0
+bullScore += low <= bbLo or close[1] < bbLo[1] ? 1 : 0
+bullScore += bullPat ? 2 : 0
+bullScore += bullPat and low - ll50 <= 0.5 * atr ? 1 : 0
+bullScore += bullDiv or bullDiv[1] ? 1 : 0
+bullScore += t15 == 1 ? 1 : 0
+bullScore += t60 == 1 ? 1 : 0
+
+bearScore = 0
+bearScore += e20 < e50 ? 1 : 0
+bearScore += rsi > 65 or (rsi[1] > 55 and rsi <= 55) ? 1 : 0
+bearScore += k > 75 and kDn ? 1 : 0
+bearScore += hist < hist[1] ? 1 : 0
+bearScore += adx > 20 and diMinus > diPlus ? 1 : 0
+bearScore += cci[1] > 100 and cci <= 100 ? 1 : 0
+bearScore += high >= bbUp or close[1] > bbUp[1] ? 1 : 0
+bearScore += bearPat ? 2 : 0
+bearScore += bearPat and hh50 - high <= 0.5 * atr ? 1 : 0
+bearScore += bearDiv or bearDiv[1] ? 1 : 0
+bearScore += t15 == -1 ? 1 : 0
+bearScore += t60 == -1 ? 1 : 0
+
+// ---------- filters ----------
+hourUTC = hour(time, "UTC")
+inSession = not useSession or (hourUTC >= 7 and hourUTC < 16 and dayofweek != dayofweek.saturday and dayofweek != dayofweek.sunday)
+calm = not skipVol or rng <= 2 * atr
+htfBull = not useHTF or (t15 >= 0 and t60 >= 0 and t15 + t60 >= 1)
+htfBear = not useHTF or (t15 <= 0 and t60 <= 0 and t15 + t60 <= -1)
+
+callSig = barstate.isconfirmed and inSession and calm and htfBull and bullScore >= minScore and bullScore >= bearScore + 2 and bull0
+putSig = barstate.isconfirmed and inSession and calm and htfBear and bearScore >= minScore and bearScore >= bullScore + 2 and bear0
+
+// ---------- plots ----------
+plot(e20, "EMA 20", color=color.new(color.aqua, 30))
+plot(e50, "EMA 50", color=color.new(color.orange, 30))
+plot(e200, "EMA 200", color=color.new(color.gray, 30))
+plotshape(callSig, "CALL", shape.triangleup, location.belowbar, color.new(color.lime, 0), size=size.small)
+plotshape(putSig, "PUT", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+
+tfMin = timeframe.in_seconds() / 60.0
+barsAhead = math.max(1, math.round(expiryMin / tfMin))
+expiryTime = time_close + expiryMin * 60000
+
+if showLabels and callSig
+    label.new(bar_index, low - 0.3 * atr, "CALL " + str.tostring(expiryMin) + "m\nscore " + str.tostring(bullScore) + "\nexp " + str.format_time(expiryTime, "HH:mm"), style=label.style_label_up, color=color.new(color.green, 0), textcolor=color.white, size=size.small)
+if showLabels and putSig
+    label.new(bar_index, high + 0.3 * atr, "PUT " + str.tostring(expiryMin) + "m\nscore " + str.tostring(bearScore) + "\nexp " + str.format_time(expiryTime, "HH:mm"), style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+
+// ---------- running backtest on this chart ----------
+// Entry = this candle's close, result = close barsAhead candles later (matches clock-aligned IQ Option expiries).
+var sigBar = array.new_int()
+var sigDir = array.new_int()
+var sigPx = array.new_float()
+var int wins = 0
+var int losses = 0
+if callSig or putSig
+    array.push(sigBar, bar_index)
+    array.push(sigDir, callSig ? 1 : -1)
+    array.push(sigPx, close)
+while array.size(sigBar) > 0 and bar_index - array.get(sigBar, 0) >= barsAhead
+    dir = array.shift(sigDir)
+    px = array.shift(sigPx)
+    array.shift(sigBar)
+    if (dir == 1 and close > px) or (dir == -1 and close < px)
+        wins += 1
+    else
+        losses += 1
+
+breakEven = 100.0 / (1 + payoutPct / 100.0)
+total = wins + losses
+winRate = total > 0 ? 100.0 * wins / total : na
+var table tb = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 20), border_width=1)
+if barstate.islast
+    table.cell(tb, 0, 0, "Expiry", text_color=color.white)
+    table.cell(tb, 1, 0, str.tostring(expiryMin) + " min (" + str.tostring(barsAhead) + " bars)", text_color=color.white)
+    table.cell(tb, 0, 1, "Signals", text_color=color.white)
+    table.cell(tb, 1, 1, str.tostring(total), text_color=color.white)
+    table.cell(tb, 0, 2, "Win rate", text_color=color.white)
+    table.cell(tb, 1, 2, na(winRate) ? "-" : str.tostring(winRate, "#.0") + "%", text_color=na(winRate) ? color.white : winRate > breakEven ? color.lime : color.red)
+    table.cell(tb, 0, 3, "Break-even", text_color=color.white)
+    table.cell(tb, 1, 3, str.tostring(breakEven, "#.0") + "%", text_color=color.white)
+    table.cell(tb, 0, 4, "Score now", text_color=color.white)
+    table.cell(tb, 1, 4, "bull " + str.tostring(bullScore) + " / bear " + str.tostring(bearScore), text_color=color.white)
+
+if timeframe.in_seconds() > expiryMin * 60
+    runtime.error("Use a chart timeframe of " + str.tostring(expiryMin) + " minutes or lower (1m or 5m recommended).")
+
+alertcondition(callSig, "IQ CALL", "CALL signal on {{ticker}} - enter next candle")
+alertcondition(putSig, "IQ PUT", "PUT signal on {{ticker}} - enter next candle")

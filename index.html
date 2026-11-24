@@ -121,6 +121,7 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
   <div class="chips" id="chips"></div>
   <p class="note" id="credit"></p></details>
   <div class="lh"><b>Pairs ranked by win analytics</b><span>best first · updates every candle</span></div>
+  <div id="warn"></div>
   <div id="pairs"></div>
 
   <details><summary>Live market chart (TradingView reference)</summary>
@@ -500,7 +501,7 @@ function decide(ind,X,i,model,val,strict,tf,force){
 const $=id=>document.getElementById(id);
 const ALL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY","GBP/JPY","EUR/GBP","NZD/USD","AUD/JPY"];
 const TV=Object.fromEntries(ALL.map(p=>[p,"FX:"+p.replace("/","")]));
-const TFMIN={5:5,10:5,15:5},KC={5:1,10:2,15:3},WIN={5:40,10:40,15:40}; // candle size (min), candles ahead, entry window (sec)
+const TFMIN={5:5,10:5,15:5},KC={5:1,10:2,15:3},WIN={5:45,10:90,15:120}; // candle size (min), candles ahead, entry window (sec)
 const CAP=760;
 let S={key:"",exp:5,pairs:["EUR/USD","GBP/USD","USD/JPY"],strict:true,payout:85,auto:true};
 try{Object.assign(S,JSON.parse(localStorage.getItem("ap_set")||"{}"));}catch(e){}
@@ -559,7 +560,7 @@ function trainAsync(cs,k,payout,strict,tf){
 async function processPair(pair){
   const tf=TF(),k=KC[S.exp],hk=pair+"|"+tfm(),expected=Math.floor(Date.now()/tf)*tf-tf;
   const mk=["v5",hk,k,S.strict?1:0,S.payout].join("|"),st=state[pair];
-  if(st&&st.mk===mk&&!st.err&&st.t>=expected)return;                 // already analysed this candle: free
+  if(st&&st.mk===mk&&!st.err&&st.t>=expected){st.at=Date.now();return;}                 // already analysed this candle: free
   let cs=null;
   if(hist[hk]){const c0=closedOf(hist[hk],tf);if(c0.length&&c0[c0.length-1].t>=expected)cs=c0;} // 5m history shared by 5, 10 and 15 min: free
   if(!cs){
@@ -586,7 +587,7 @@ async function processPair(pair){
   if(!m.model){state[pair]={mk,t:last.t,price:last.c,val,err:val.note};return;}
   const d=analyseLast(cs,m.model,val,S.strict,tf,false);
   const stale=Date.now()-last.t>Math.max(20*60000,4*tf),fresh=last.t>=expected,closeT=last.t+tf;
-  state[pair]={mk,t:last.t,price:last.c,val,d,stale,fresh,closeT};
+  state[pair]={mk,t:last.t,price:last.c,val,d,stale,fresh,closeT,at:Date.now()};
   if(d.side&&fresh&&!stale&&!logged[pair+closeT]&&Date.now()<=closeT+WIN[S.exp]*1000){
     logged[pair+closeT]=1;addLog(pair,d.side,d.tier,d.srcs,d.p,closeT,true);beep();
   }
@@ -607,15 +608,17 @@ async function runAll(){
   if(busy)return;
   if(marketClosed()){$("status").textContent="Forex market is closed (weekend). No credits used.";return;}
   busy=true;$("refresh").disabled=true;const snap=S.exp;let capped=false;
-  for(const p of S.pairs){
+  const order=ranked().map(x=>x.p);let done=0;      // best-ranked pairs refresh first
+  for(const p of order){
     if(snap!==S.exp)break;
+    $("refresh").textContent=`Analysing ${++done}/${order.length}...`;
     try{await processPair(p);}
     catch(e){if(e.message==="CAP"){capped=true;break;}
       state[p]={err:e.message==="RATE"?"Per-minute limit. Close other copies of the app, then Refresh.":String(e.message).slice(0,100)};}
     render();
   }
   $("status").textContent=capped?`Daily credit cap reached (${used()}). Paused; resets 04:00 UAE.`:`Updated ${uS(Date.now())} UAE | Credits used today on this phone: ${used()}/800`;
-  busy=false;$("refresh").disabled=false;render();
+  busy=false;$("refresh").disabled=false;$("refresh").textContent="Analyse now";render();
 }
 function schedule(){clearTimeout(timer);if(!S.auto)return;const tf=TF(),now=Date.now(),next=Math.ceil(now/tf)*tf+2500;
   timer=setTimeout(async()=>{await runAll();schedule();},next-now);}
@@ -729,7 +732,7 @@ function cardHtml(x,idx){
     :x.kind==="conflict"?`<div class="st">Proven sources disagree: no trade</div>`:!x.open?`<div class="st">Entry window for this candle has passed: next check at the next candle close</div>`
     :`<div class="st">No clear setup on this candle (leaning ${x.side})</div>`;
   const bars=x.parts.map(q=>{const c=q.v>0.05?"up":q.v<-0.05?"dn":"";return `<span>${q.k}</span><div class="dv"><i class="${q.v>=0?"up":"dn"}" data-s="${q.v.toFixed(3)}"></i></div><span class="vv ${c}">${q.v>0.05?"▲":q.v<-0.05?"▼":"–"}${Math.round(Math.abs(q.v)*100)}</span>`;}).join("");
-  return `<div class="r1">${rk}<div><div class="pn">${x.p}${x.s.busy?'<span class="upd">updating</span>':""}</div><div class="pp">${(+x.s.price).toFixed(x.p.includes("JPY")?3:5)} · candle ${uM(x.s.t)} UAE</div></div>${pill}</div>
+  return `<div class="r1">${rk}<div><div class="pn">${x.p}${x.s.busy?'<span class="upd">updating</span>':""}</div><div class="pp">${(+x.s.price).toFixed(x.p.includes("JPY")?3:5)} · candle ${uM(x.s.t)}–${uM(x.s.closeT)} closed · checked ${uS(x.s.at||x.s.closeT)}</div></div>${pill}</div>
    <div class="mt"><div><div class="lb">Confidence <b>${x.conf}%</b></div><div class="bar"><i data-s="${(x.conf/100).toFixed(3)}"></i></div></div>
      <div><div class="lb">Win analytics <b>${x.win?pct(x.win):"–"}</b></div><div class="bar w"><i data-s="${x.win?Math.max(0,(x.win-0.4)/0.35).toFixed(3):0}"></i></div></div></div>
    <div class="pp" style="margin-top:3px">${x.win?x.winSrc:"not proven on this pair yet"}</div>
@@ -798,6 +801,7 @@ function logHtml(){
 }
 function render(){
   renderPairs();
+  $("warn").innerHTML=S.pairs.length>6?`<div class="st off" style="margin:6px 0">You have ${S.pairs.length} pairs ticked. The free data plan allows about 6 pairs per minute, so pairs after #6 update 1-2 minutes late and miss the entry. Tick 3-6 pairs for on-time signals.</div>`:"";
   const ph=Math.round(S.pairs.length*60/tfm());
   $("credit").textContent=`About ${ph} credits per hour while running (free limit 800/day).`+(ph>70?" That is high for the free plan (~"+Math.floor(800/ph)+" hours/day): tick fewer pairs.":"");
   document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",+b.dataset.e===S.exp));

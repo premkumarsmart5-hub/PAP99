@@ -509,7 +509,7 @@ const KEY_RE=/^[A-Za-z0-9_-]{8,64}$/;
 const ALL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY","GBP/JPY","EUR/GBP","NZD/USD","AUD/JPY"];
 const TV=Object.fromEntries(ALL.map(p=>[p,"FX:"+p.replace("/","")]));
 const TFMIN={5:5,10:5,15:5},KC={5:1,10:2,15:3},WIN={5:45,10:90,15:120}; // candle size (min), candles ahead, entry window (sec)
-const CAP=760;
+const CAP=760,FOCUS=6;
 let S={key:"",exp:5,pairs:["EUR/USD","GBP/USD","USD/JPY"],strict:true,payout:85,auto:true};
 S.remember=true;
 try{const st=JSON.parse(localStorage.getItem("ap_set")||"{}");if(st&&typeof st==="object")for(const k of ["key","exp","pairs","strict","payout","auto","remember"])if(k in st)S[k]=st[k];}catch(e){}
@@ -585,7 +585,7 @@ async function processPair(pair){
   let cs=null;
   if(hist[hk]){const c0=closedOf(hist[hk],tf);if(c0.length&&c0[c0.length-1].t>=expected)cs=c0;} // 5m history shared by 5, 10 and 15 min: free
   if(!cs){
-    for(let attempt=0;attempt<3;attempt++){
+    for(let attempt=0;attempt<2;attempt++){
       if(used()>=CAP)throw new Error("CAP");
       state[pair]=Object.assign({},st,{busy:hist[hk]?"Fetching newest candle...":"Downloading history..."});render();
       try{
@@ -594,7 +594,7 @@ async function processPair(pair){
           hist[hk]=(nw.length&&last<nw[0].t-tf*1.5)?await fetchSeries(pair,5000):mergeC(hist[hk],nw);}
         cs=closedOf(hist[hk],tf);
         if(!cs.length||cs[cs.length-1].t>=expected||marketClosed())break;
-        await sleep(3500);                                              // newest candle not published yet: retry fast
+        await sleep(6000);                                              // newest candle not published yet: one retry
       }catch(e){if(e.message==="RATE"&&attempt<2){$("status").textContent="Per-minute limit, waiting...";await sleep(62000);continue;}throw e;}
     }
   }
@@ -629,8 +629,14 @@ async function runAll(){
   if(busy)return;
   if(marketClosed()){$("status").textContent="Forex market is closed (weekend). No credits used.";return;}
   busy=true;$("refresh").disabled=true;const snap=S.exp;let capped=false;
-  const order=ranked().map(x=>x.p);let done=0;      // best-ranked pairs refresh first
-  for(const p of order){
+  /* free plan ~6 requests/minute: with more than 6 pairs, refresh the top 5 every candle plus 1 rotating pair,
+     so the best pairs are always on time. First load (pairs never analysed) still covers every pair once. */
+  const all=ranked().map(x=>x.p),fresh=all.some(p=>!state[p]);let order=all;
+  const cand=Math.floor(Date.now()/TF());
+  if(!fresh&&all.length>FOCUS){const rest=all.slice(FOCUS-1);order=all.slice(0,FOCUS-1).concat(rest[cand%rest.length]);
+    all.forEach(p=>{if(!order.includes(p)&&state[p])state[p].skip=cand;});}
+  let done=0;
+  for(const p of order){if(state[p])state[p].skip=null;
     if(snap!==S.exp)break;
     $("refresh").textContent=`Analysing ${++done}/${order.length}...`;
     try{await processPair(p);}
@@ -641,7 +647,7 @@ async function runAll(){
   $("status").textContent=capped?`Daily credit cap reached (${used()}). Paused; resets 04:00 UAE.`:`Updated ${uS(Date.now())} UAE | Credits used today on this phone: ${used()}/800`;
   busy=false;$("refresh").disabled=false;$("refresh").textContent="Analyse now";render();
 }
-function schedule(){clearTimeout(timer);if(!S.auto)return;const tf=TF(),now=Date.now(),next=Math.ceil(now/tf)*tf+2500;
+function schedule(){clearTimeout(timer);if(!S.auto)return;const tf=TF(),now=Date.now(),next=Math.ceil(now/tf)*tf+7000;   // give the data feed ~7s to publish the closed candle
   timer=setTimeout(async()=>{await runAll();schedule();},next-now);}
 function refreshNow(){clearTimeout(timer);clearTimeout(pend);
   pend=setTimeout(async function go(){if(busy){pend=setTimeout(go,1500);return;}await runAll();schedule();},300);}
@@ -750,7 +756,8 @@ function cardHtml(x,idx){
     :x.kind==="lean"?`<div class="st off">Lean only, not proven: demo account only</div>`
     :x.kind==="off"?`<div class="st off">${x.d.off==="OFF-HOURS"?"Outside 11:00-20:00 UAE (strict filter)":"Candle too volatile, skipped"}</div>`
     :x.kind==="closed"?`<div class="st">Market closed or data delayed</div>`
-    :x.kind==="conflict"?`<div class="st">Proven sources disagree: no trade</div>`:!x.open?`<div class="st">Entry window for this candle has passed: next check at the next candle close</div>`
+    :x.kind==="conflict"?`<div class="st">Proven sources disagree: no trade</div>`:x.s.skip===Math.floor(Date.now()/TF())?`<div class="st off">Not refreshed this candle: the free data plan covers about 6 pairs per minute, so the top 5 pairs get priority. This pair takes its turn on a later candle.</div>`
+    :!x.open?`<div class="st">Entry window for this candle has passed: next check at the next candle close</div>`
     :`<div class="st">No clear setup on this candle (leaning ${x.side})</div>`;
   const bars=x.parts.map(q=>{const c=q.v>0.05?"up":q.v<-0.05?"dn":"";return `<span>${q.k}</span><div class="dv"><i class="${q.v>=0?"up":"dn"}" data-s="${q.v.toFixed(3)}"></i></div><span class="vv ${c}">${q.v>0.05?"▲":q.v<-0.05?"▼":"–"}${Math.round(Math.abs(q.v)*100)}</span>`;}).join("");
   return `<div class="r1">${rk}<div><div class="pn">${x.p}${x.s.busy?'<span class="upd">updating</span>':""}</div><div class="pp">${(+x.s.price).toFixed(x.p.includes("JPY")?3:5)} · candle ${uM(x.s.t)}–${uM(x.s.closeT)} closed · checked ${uS(x.s.at||x.s.closeT)}</div></div>${pill}</div>
@@ -822,7 +829,7 @@ function logHtml(){
 }
 function render(){
   renderPairs();
-  $("warn").innerHTML=S.pairs.length>6?`<div class="st off" style="margin:6px 0">You have ${S.pairs.length} pairs ticked. The free data plan allows about 6 pairs per minute, so pairs after #6 update 1-2 minutes late and miss the entry. Tick 3-6 pairs for on-time signals.</div>`:"";
+  $("warn").innerHTML=S.pairs.length>6?`<div class="st off" style="margin:6px 0">Focus mode: ${S.pairs.length} pairs ticked, but the free data plan covers about 6 per minute. Each candle the top 5 pairs refresh on time and 1 other pair takes a turn. Tick 6 or fewer pairs to refresh every pair on every candle.</div>`:"";
   const ph=Math.round(S.pairs.length*60/tfm());
   $("credit").textContent=`About ${ph} credits per hour while running (free limit 800/day).`+(ph>70?" That is high for the free plan (~"+Math.floor(800/ph)+" hours/day): tick fewer pairs.":"");
   document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",+b.dataset.e===S.exp));

@@ -42,3 +42,16 @@ Tap **Find best expiry** to compare 5, 10 and 15 minutes on every ticked pair.
 * It then recommends one overall expiry, which you can switch to in one tap. The trained models are kept, so switching is instant.
 * It costs no extra data credits once a pair's history is downloaded. It takes about 5 seconds per pair.
 * Markets change, so run it again every few hours. If it says "No expiry is proven right now", trade on demo only.
+
+## Ranked signal screen
+* **Big hero signal:** the strongest signal is shown at the top with a large CALL ▲ or PUT ▼. It has a glowing green or red background, its confidence %, its win analytics %, a countdown ring for the entry window, and the exact IQ Option action (HIGHER or LOWER and the expiry time).
+* **Ranked pairs:** pairs are sorted best first. Open validated signals come first, then leans, then the rest, and each group is ordered by win analytics and then confidence. Cards slide smoothly into their new positions when the ranking changes.
+* **One combined verdict for each pair.** It is built from six parts:
+  * The AI models
+  * The indicators
+  * The candle patterns (5-minute and 15-minute)
+  * The 15-minute and 1-hour trend
+  * Recent price movement
+  * Proven history
+* Each part has its own bar that shows which way it points, so you can see why a pair says CALL or PUT.
+* All animations are switched off if your phone is set to reduce motion.

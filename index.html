@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b0f17">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.twelvedata.com; frame-src https://s.tradingview.com https://www.tradingview.com; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <title>AI Trader</title>
@@ -99,7 +101,9 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
 
 <div id="setup">
   <p class="note">1) Free API key from twelvedata.com. 2) Paste it, choose your IQ Option payout, tap Start. Keep the screen on.</p>
-  <input type="text" id="key" placeholder="Twelve Data API key" autocomplete="off">
+  <div style="display:flex;gap:6px"><input type="password" id="key" placeholder="Twelve Data API key" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64" style="flex:1">
+  <button type="button" id="showKey" style="width:auto;background:#27324a;padding:12px 14px">Show</button></div>
+  <label class="note"><input type="checkbox" id="remember" checked> Remember key on this phone (untick on a shared phone)</label>
   <label class="note">Your IQ Option payout (check on the asset)</label>
   <select id="payout"><option value="80">80%</option><option value="85" selected>85%</option><option value="90">90%</option></select>
   <button id="start">Start</button>
@@ -125,7 +129,7 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
   <div id="pairs"></div>
 
   <details><summary>Live market chart (TradingView reference)</summary>
-    <select id="chartPair"></select><iframe id="tv" title="chart"></iframe>
+    <select id="chartPair"></select><iframe id="tv" title="chart" sandbox="allow-scripts allow-same-origin allow-popups" referrerpolicy="no-referrer" loading="lazy"></iframe>
     <p class="note">IQ Option has no embeddable chart, so this is a live forex chart for reference. Prices can differ slightly. <a style="color:#7db4ff" href="https://iqoption.com/traderoom" target="_blank" rel="noopener">Open IQ Option</a></p>
   </details>
 
@@ -134,7 +138,7 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
   <div id="log"></div>
   <button id="clear" style="background:#27324a">Clear log</button>
   <p class="note" id="status"></p>
-  <button id="stop" style="background:#27324a">Change API key</button>
+  <div class="grid"><button id="stop" style="background:#27324a">Change API key</button><button id="wipe" style="background:#4b1d1d">Forget key and data</button></div>
 </div>
 
 <p class="note">How it works: for each pair the app downloads about 5000 five-minute candles and reads 49 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger squeeze, EMAs, RSI divergence, 32 candle patterns scored by location plus patterns on the 15-minute candle, support and resistance, 15-minute and 1-hour trend, time of day). Two AI models trained in the background (gradient-boosted trees + logistic regression) must agree on the direction for the chosen expiry (5, 10 or 15 min), and 10 classic strategies plus every candle pattern are tested on this pair's own history. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
@@ -499,15 +503,25 @@ function decide(ind,X,i,model,val,strict,tf,force){
 <script>
 /* ===== APP ===== */
 const $=id=>document.getElementById(id);
+/* escape any text that did not come from this app's own code before it goes into the page */
+const esc=v=>String(v).replace(/[&<>"'`]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","`":"&#96;"})[c]);
+const KEY_RE=/^[A-Za-z0-9_-]{8,64}$/;
 const ALL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY","GBP/JPY","EUR/GBP","NZD/USD","AUD/JPY"];
 const TV=Object.fromEntries(ALL.map(p=>[p,"FX:"+p.replace("/","")]));
 const TFMIN={5:5,10:5,15:5},KC={5:1,10:2,15:3},WIN={5:45,10:90,15:120}; // candle size (min), candles ahead, entry window (sec)
 const CAP=760;
 let S={key:"",exp:5,pairs:["EUR/USD","GBP/USD","USD/JPY"],strict:true,payout:85,auto:true};
-try{Object.assign(S,JSON.parse(localStorage.getItem("ap_set")||"{}"));}catch(e){}
+S.remember=true;
+try{const st=JSON.parse(localStorage.getItem("ap_set")||"{}");if(st&&typeof st==="object")for(const k of ["key","exp","pairs","strict","payout","auto","remember"])if(k in st)S[k]=st[k];}catch(e){}
+try{if(!S.key)S.key=sessionStorage.getItem("ap_key")||"";}catch(e){}
+if(typeof S.key!=="string"||!KEY_RE.test(S.key))S.key="";if(!Array.isArray(S.pairs))S.pairs=[];
+S.exp=+S.exp;S.payout=[80,85,90].includes(+S.payout)?+S.payout:85;S.strict=S.strict!==false;S.auto=S.auto!==false;
 if(!TFMIN[S.exp])S.exp=5;S.pairs=S.pairs.filter(p=>ALL.includes(p));if(!S.pairs.length)S.pairs=["EUR/USD"];
-const save=()=>{try{localStorage.setItem("ap_set",JSON.stringify(S));}catch(e){}};
+const save=()=>{try{const o=Object.assign({},S);if(!S.remember){o.key="";sessionStorage.setItem("ap_key",S.key);}else sessionStorage.removeItem("ap_key");
+  localStorage.setItem("ap_set",JSON.stringify(o));}catch(e){}};
 let LOG=[];try{LOG=JSON.parse(localStorage.getItem("ap_log")||"[]");}catch(e){}
+if(!Array.isArray(LOG))LOG=[];
+LOG=LOG.filter(x=>x&&ALL.includes(x.pair)&&(x.side==="CALL"||x.side==="PUT")&&Number.isFinite(x.closeT)&&Number.isFinite(x.expiryAt)&&(x.res===null||x.res==="W"||x.res==="L"));
 const saveLog=()=>{try{localStorage.setItem("ap_log",JSON.stringify(LOG.slice(-150)));}catch(e){}};
 const hist={},models={},state={},logged={};
 let busy=false,timer=null,pend=null,ticker=null,audioCtx=null,wake=null;
@@ -529,10 +543,17 @@ function marketClosed(){const d=new Date(),day=d.getUTCDay(),h=d.getUTCHours();r
 
 async function fetchSeries(pair,size){
   await throttle();addCredit();
-  const u=`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair)}&interval=${tfm()}min&outputsize=${size}&timezone=UTC&apikey=${S.key}`;
-  const j=await (await fetch(u)).json();
-  if(j.status==="error"){if(/current minute/i.test(j.message||""))throw new Error("RATE");throw new Error(j.message||"API error");}
-  return j.values.reverse().map(v=>({t:Date.parse(v.datetime.replace(" ","T")+"Z"),o:+v.open,h:+v.high,l:+v.low,c:+v.close}));
+  const u=`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(pair)}&interval=${tfm()}min&outputsize=${size}&timezone=UTC&apikey=${encodeURIComponent(S.key)}`;
+  const r=await fetch(u,{credentials:"omit",cache:"no-store",referrerPolicy:"no-referrer"});
+  let j;try{j=await r.json();}catch(e){throw new Error("Bad response from data service ("+r.status+")");}
+  if(!j||typeof j!=="object")throw new Error("Bad response from data service");
+  if(j.status==="error"){const m=String(j.message||"");if(/current minute/i.test(m))throw new Error("RATE");
+    if(/api ?key/i.test(m))throw new Error("API key rejected: tap Change API key");throw new Error(m.slice(0,120)||"API error");}
+  if(!Array.isArray(j.values))throw new Error("No candle data returned");
+  const out=[];for(const v of j.values){if(!v||typeof v.datetime!=="string")continue;
+    const c={t:Date.parse(v.datetime.replace(" ","T")+"Z"),o:+v.open,h:+v.high,l:+v.low,c:+v.close};
+    if([c.t,c.o,c.h,c.l,c.c].every(Number.isFinite)&&c.h>=c.l&&c.o>0)out.push(c);}
+  return out.reverse();
 }
 const mergeC=(a,b)=>{const m=new Map(a.map(x=>[x.t,x]));b.forEach(x=>m.set(x.t,x));return [...m.values()].sort((p,q)=>p.t-q.t).slice(-6000);};
 function closedOf(arr,tf){const now=Date.now();let n=arr.length;while(n>0&&arr[n-1].t+tf>now)n--;return arr.slice(0,n);}
@@ -665,7 +686,7 @@ function renderBest(){
   const out=$("best"),r=bestRes;if(!r){out.innerHTML="";return;}
   const EX=[5,10,15],cell=(x,e)=>{if(x.err)return "";const b=x[e].b;
     return `<td class="${x.best===e?"win":""}">${b?`<span class="g">${pct(b.low)}</span><br><span style="font-size:10px;color:var(--mut)">${pct(b.wr)} / ${b.n}</span>`:"<span style='color:var(--mut)'>not proven</span>"}</td>`;};
-  const rows=Object.entries(r.pairs).map(([p,x])=>x.err?`<tr><td>${p}</td><td colspan="4" style="color:#e9a36a">${x.err}</td></tr>`
+  const rows=Object.entries(r.pairs).map(([p,x])=>x.err?`<tr><td>${p}</td><td colspan="4" style="color:#e9a36a">${esc(x.err)}</td></tr>`
     :`<tr><td>${p}</td>${EX.map(e=>cell(x,e)).join("")}<td><b>${x.best?x.best+" min":"skip"}</b><br><span style="font-size:10px;color:var(--mut)">${x.best?x[x.best].b.src:""}</span></td></tr>`).join("");
   const head=r.top?`<div class="big" style="font-size:20px;font-weight:800">Recommended: ${r.top} min</div><small class="ok">Best for ${r.wins[r.top].length?r.wins[r.top].join(", "):"the most pairs overall"}. Numbers are the worst-case win rate on unseen history (break-even ${pct(r.be)}).</small>
       ${S.exp!==r.top?`<button id="useBest">Switch to ${r.top} min</button>`:`<small class="ok">You are already on ${r.top} min.</small>`}`
@@ -719,8 +740,8 @@ function detailsHtml(x){
 }
 function cardHtml(x,idx){
   const rk=`<div class="rk ${["g","s","b"][idx]||""}">${idx+1}</div>`;
-  if(x.kind==="init"||(x.kind==="busy"))return `<div class="r1">${rk}<div><div class="pn">${x.p}</div><div class="pp">${x.s&&x.s.busy?x.s.busy:"Waiting..."}</div></div><span class="pill wait">…</span></div><div class="sk scan"></div><div class="sk scan" style="width:70%"></div>`;
-  if(x.kind==="err")return `<div class="r1">${rk}<div><div class="pn">${x.p}</div><div class="pp" style="color:#e9a36a">${x.s.err}</div></div><span class="pill wait">ERROR</span></div>`;
+  if(x.kind==="init"||(x.kind==="busy"))return `<div class="r1">${rk}<div><div class="pn">${x.p}</div><div class="pp">${x.s&&x.s.busy?esc(x.s.busy):"Waiting..."}</div></div><span class="pill wait">…</span></div><div class="sk scan"></div><div class="sk scan" style="width:70%"></div>`;
+  if(x.kind==="err")return `<div class="r1">${rk}<div><div class="pn">${x.p}</div><div class="pp" style="color:#e9a36a">${esc(x.s.err)}</div></div><span class="pill wait">ERROR</span></div>`;
   const sc=x.side.toLowerCase(),arrow=x.dir>0?"▲":"▼";
   const pill=x.kind==="signal"?`<span class="pill ${sc}">${x.side} ${arrow}</span>`:x.kind==="lean"?`<span class="pill lean ${sc}">${x.side}? ${arrow}</span>`
     :`<span class="pill wait">${{off:x.d.off==="OFF-HOURS"?"OFF-HOURS":"VOLATILE",closed:"CLOSED",conflict:"CONFLICT",wait:"WAIT"}[x.kind]}</span>`;
@@ -825,8 +846,9 @@ function drawChips(){
 const resetAll=()=>{for(const k in state)delete state[k];heroKey="";};
 
 async function start(){
-  S.key=$("key").value.trim();S.payout=+$("payout").value;
-  if(!S.key){alert("Paste your Twelve Data API key first.");return;}
+  const k=$("key").value.trim();S.payout=+$("payout").value;S.remember=$("remember").checked;
+  if(!KEY_RE.test(k)){alert("That does not look like a Twelve Data API key (letters and numbers only). Paste it again.");return;}
+  S.key=k;
   save();$("setup").style.display="none";$("main").style.display="block";
   $("strict").checked=S.strict;$("auto").checked=S.auto;$("payout2").value=String(S.payout);
   drawChips();setChart();
@@ -836,7 +858,11 @@ async function start(){
 }
 function stop(){clearTimeout(timer);clearInterval(ticker);try{wake&&wake.release();}catch(e){}$("main").style.display="none";$("setup").style.display="block";}
 
-try{$("key").value=S.key||"";$("payout").value=String(S.payout);}catch(e){}
+try{$("key").value=S.key||"";$("payout").value=String(S.payout);$("remember").checked=S.remember!==false;}catch(e){}
+$("showKey").onclick=()=>{const i=$("key"),h=i.type==="password";i.type=h?"text":"password";$("showKey").textContent=h?"Hide":"Show";};
+$("wipe").onclick=()=>{if(!confirm("Remove your API key, trade log and all saved data from this phone?"))return;
+  try{localStorage.clear();sessionStorage.clear();}catch(e){}LOG=[];S.key="";$("key").value="";stop();
+  try{caches.keys().then(k=>k.forEach(n=>caches.delete(n)));}catch(e){}alert("All saved data removed from this phone.");};
 $("start").onclick=start;$("bestBtn").onclick=findBest;$("stop").onclick=stop;$("refresh").onclick=refreshNow;
 document.querySelectorAll("#seg button").forEach(b=>b.onclick=()=>{S.exp=+b.dataset.e;save();resetAll();setChart();render();refreshNow();});
 $("strict").onchange=e=>{S.strict=e.target.checked;save();resetAll();bestRes=null;renderBest();render();refreshNow();};

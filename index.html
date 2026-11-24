@@ -38,6 +38,8 @@ button{background:var(--acc);color:#fff;font-weight:700}button:disabled{opacity:
 .lg{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card);border-radius:8px;padding:8px 10px;margin:4px 0;font-size:12px}
 .mini{width:auto;padding:6px 10px;margin:0 0 0 4px;font-size:12px}.mini.w{background:var(--up)}.mini.l{background:var(--dn)}
 .res{font-weight:800;padding:4px 8px;border-radius:6px}.res.W{background:var(--up)}.res.L{background:var(--dn)}
+.bt{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}.bt td,.bt th{padding:6px 4px;text-align:center;border-bottom:1px solid #27324a}
+.bt th{color:var(--mut);font-weight:600}.bt td:first-child,.bt th:first-child{text-align:left}.bt .g{color:#6fdc8c;font-weight:700}.bt .win{background:#14452a;border-radius:6px}
 .callt{color:#6fdc8c}.putt{color:#ff8a8a}
 iframe{width:100%;height:340px;border:0;border-radius:10px;background:#000}
 summary{cursor:pointer;font-weight:700;padding:8px 0}
@@ -61,6 +63,8 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
     <button id="refresh">Analyse now</button>
     <select id="payout2"><option value="80">Payout 80%</option><option value="85">Payout 85%</option><option value="90">Payout 90%</option></select>
   </div>
+  <button id="bestBtn" style="background:#6d28d9">Find best expiry (tests 5, 10, 15 min on all pairs)</button>
+  <div id="best"></div>
   <label class="note"><input type="checkbox" id="auto" checked> Auto analyse at every candle close</label>
   <label class="note"><input type="checkbox" id="strict" checked> Strict filter: 11:00-20:00 UAE only, skip volatile candles</label>
   <div class="chips" id="chips"></div>
@@ -552,6 +556,56 @@ function schedule(){clearTimeout(timer);if(!S.auto)return;const tf=TF(),now=Date
 function refreshNow(){clearTimeout(timer);clearTimeout(pend);
   pend=setTimeout(async function go(){if(busy){pend=setTimeout(go,1500);return;}await runAll();schedule();},300);}
 
+/* ---- best expiry finder: trains 5/10/15 min on the same 5m history (no extra credits once downloaded) ---- */
+let bestBusy=false,bestRes=null;
+function bestOf(v){                       // strongest proven source: AI ensemble, a strategy, or a candle pattern
+  const c=[];if(v.edge)c.push({src:"AI ensemble",low:v.low,wr:v.wr,n:v.n,perDay:v.perDay});
+  (v.rules||[]).filter(r=>r.pass).forEach(r=>c.push({src:r.name,low:r.low,wr:r.wr,n:r.n}));
+  (v.pats||[]).filter(q=>q.pass).forEach(q=>c.push({src:q.name,low:q.low,wr:q.wr,n:q.n}));
+  c.sort((a,b)=>b.low-a.low);return c[0]||null;}
+async function findBest(){
+  if(bestBusy)return;bestBusy=true;$("bestBtn").disabled=true;
+  const tf=TF(),res={pairs:{},be:1/(1+S.payout/100),at:Date.now(),payout:S.payout,strict:S.strict},EX=[5,10,15],out=$("best");
+  try{
+    for(const pair of S.pairs){
+      const hk=pair+"|"+tfm();res.pairs[pair]={};
+      if(!hist[hk]){
+        if(marketClosed()){res.pairs[pair].err="market closed, no data";continue;}
+        if(used()>=CAP){res.pairs[pair].err="daily credit cap reached";continue;}
+        out.innerHTML=`<div class="card"><small>${pair}: downloading history...</small></div>`;
+        try{hist[hk]=await fetchSeries(pair,5000);}catch(e){res.pairs[pair].err=String(e.message).slice(0,80);continue;}
+      }
+      const cs=closedOf(hist[hk],tf);if(cs.length<1500){res.pairs[pair].err="not enough history";continue;}
+      for(const e of EX){
+        out.innerHTML=`<div class="card"><small>Testing ${pair} at ${e} min... (${Object.keys(res.pairs).length}/${S.pairs.length} pairs)</small></div>`;
+        const k=KC[e],mk=["v5",hk,k,S.strict?1:0,S.payout].join("|");let m=models[mk];
+        if(!m||Date.now()-m.at>3*3600e3){const r=await trainAsync(cs,k,S.payout/100,S.strict,tf);m=models[mk]={model:r.model,val:r.val,at:Date.now()};}
+        res.pairs[pair][e]={b:bestOf(m.val),val:m.val};
+      }
+    }
+    const score={5:0,10:0,15:0},wins={5:[],10:[],15:[]};
+    for(const pair in res.pairs){const r=res.pairs[pair];if(r.err)continue;let be=null;
+      for(const e of EX){const b=r[e].b;if(b&&(!be||b.low>r[be].b.low))be=e;}
+      r.best=be;if(be){wins[be].push(pair);}
+      for(const e of EX)if(r[e].b)score[e]+=r[e].b.low-res.be;}
+    const top=EX.filter(e=>score[e]>0).sort((a,b)=>score[b]-score[a]||wins[b].length-wins[a].length)[0]||null;
+    Object.assign(res,{top,wins});bestRes=res;
+  }finally{bestBusy=false;$("bestBtn").disabled=false;renderBest();}
+}
+function renderBest(){
+  const out=$("best"),r=bestRes;if(!r){out.innerHTML="";return;}
+  const EX=[5,10,15],cell=(x,e)=>{if(x.err)return "";const b=x[e].b;
+    return `<td class="${x.best===e?"win":""}">${b?`<span class="g">${pct(b.low)}</span><br><span style="font-size:10px;color:var(--mut)">${pct(b.wr)} / ${b.n}</span>`:"<span style='color:var(--mut)'>not proven</span>"}</td>`;};
+  const rows=Object.entries(r.pairs).map(([p,x])=>x.err?`<tr><td>${p}</td><td colspan="4" style="color:#e9a36a">${x.err}</td></tr>`
+    :`<tr><td>${p}</td>${EX.map(e=>cell(x,e)).join("")}<td><b>${x.best?x.best+" min":"skip"}</b><br><span style="font-size:10px;color:var(--mut)">${x.best?x[x.best].b.src:""}</span></td></tr>`).join("");
+  const head=r.top?`<div class="big" style="font-size:20px;font-weight:800">Recommended: ${r.top} min</div><small class="ok">Best for ${r.wins[r.top].length?r.wins[r.top].join(", "):"the most pairs overall"}. Numbers are the worst-case win rate on unseen history (break-even ${pct(r.be)}).</small>
+      ${S.exp!==r.top?`<button id="useBest">Switch to ${r.top} min</button>`:`<small class="ok">You are already on ${r.top} min.</small>`}`
+    :`<div style="font-size:18px;font-weight:800;color:#e9a36a">No expiry is proven right now</div><small class="bad">No AI, strategy or candle pattern beat break-even (${pct(r.be)}) with confidence on any pair. Wait for a better session, or practise on demo only.</small>`;
+  out.innerHTML=`<div class="card">${head}<table class="bt"><tr><th>Pair</th><th>5 min</th><th>10 min</th><th>15 min</th><th>Best</th></tr>${rows}</table>
+    <small>Tested ${uM(r.at)} UAE at payout ${r.payout}%${r.strict?", strict filter on":""}. Big = worst-case %, small = past win rate / trades. Markets change: re-run every few hours.</small></div>`;
+  const u=$("useBest");if(u)u.onclick=()=>{S.exp=r.top;save();resetAll();setChart();render();renderBest();refreshNow();};
+}
+
 /* ---- best setup selection ---- */
 function pickSetup(){
   const now=Date.now(),c=[];
@@ -650,10 +704,10 @@ async function start(){
 function stop(){clearTimeout(timer);clearInterval(ticker);try{wake&&wake.release();}catch(e){}$("main").style.display="none";$("setup").style.display="block";}
 
 try{$("key").value=S.key||"";$("payout").value=String(S.payout);}catch(e){}
-$("start").onclick=start;$("stop").onclick=stop;$("refresh").onclick=refreshNow;
+$("start").onclick=start;$("bestBtn").onclick=findBest;$("stop").onclick=stop;$("refresh").onclick=refreshNow;
 document.querySelectorAll("#seg button").forEach(b=>b.onclick=()=>{S.exp=+b.dataset.e;save();resetAll();setChart();render();refreshNow();});
-$("strict").onchange=e=>{S.strict=e.target.checked;save();resetAll();render();refreshNow();};
-$("payout2").onchange=e=>{S.payout=+e.target.value;save();resetAll();render();refreshNow();};
+$("strict").onchange=e=>{S.strict=e.target.checked;save();resetAll();bestRes=null;renderBest();render();refreshNow();};
+$("payout2").onchange=e=>{S.payout=+e.target.value;save();resetAll();bestRes=null;renderBest();render();refreshNow();};
 $("auto").onchange=e=>{S.auto=e.target.checked;save();schedule();};
 $("chartPair").onchange=setChart;
 $("clear").onclick=()=>{if(confirm("Clear your trade log?")){LOG=[];saveLog();render();}};

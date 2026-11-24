@@ -34,3 +34,11 @@ No indicator or AI can guarantee wins. Short-expiry binary options are close to 
 * **Strength score:** each pattern has a base weight, from 1 for a harami up to 3 for a morning star or three outside. That weight is raised by up to 2.5x when the pattern forms at support or resistance, at a Bollinger band, or at an RSI extreme.
 * The pattern on the **last closed 15-minute candle** is also shown and is given to the AI.
 * **Pattern history:** each pattern's real win rate on that pair at your chosen expiry is measured on about 17 days of history. A pattern that beats break-even in both the older and the newer half of that history is marked **PROVEN** and can trigger a signal on its own. That includes a "strong candle setup" with a strength of 4 or more.
+
+## Find best expiry
+Tap **Find best expiry** to compare 5, 10 and 15 minutes on every ticked pair.
+* It trains the AI and tests the strategies and candle patterns at all three expiries.
+* Each cell shows the **worst-case win rate on unseen history** of the strongest proven source: the AI, a strategy, or a candle pattern. The best expiry for each pair is highlighted.
+* It then recommends one overall expiry, which you can switch to in one tap. The trained models are kept, so switching is instant.
+* It costs no extra data credits once a pair's history is downloaded. It takes about 5 seconds per pair.
+* Markets change, so run it again every few hours. If it says "No expiry is proven right now", trade on demo only.

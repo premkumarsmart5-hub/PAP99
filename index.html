@@ -66,13 +66,16 @@ iframe{width:100%;height:340px;border:0;border-radius:10px;background:#000}
 .scan{background:linear-gradient(100deg,var(--card) 30%,#1f2b45 50%,var(--card) 70%) 0 0/250% 100%;animation:shim 1.8s linear infinite}
 @keyframes shim{to{background-position:-250% 0}}
 .radar{width:46px;height:46px;margin:0 auto 6px;border-radius:50%;border:2px solid #3b82f6;position:relative;animation:pulse 1.6s ease-out infinite}
-/* radar scanning hero */
-#banner.radarh{background:radial-gradient(110% 80% at 50% 45%,#06261a 0%,#04140f 60%,#030b08 100%);padding:14px 12px 16px;border:1px solid rgba(74,222,128,.18)}
-.rtop{display:flex;justify-content:space-between;align-items:center;margin:0 4px 8px;font-size:12px;color:#86efac;letter-spacing:1.5px;text-transform:uppercase}
-.rtop b{font-size:13px}.rlive{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:6px;box-shadow:0 0 8px #4ade80;animation:blink 1.2s steps(2) infinite}
-.rcv{display:block;margin:0 auto;width:min(300px,100%);aspect-ratio:1}
-.rhit{margin-top:10px;font-size:16px;font-weight:800;color:#dcfce7;min-height:22px;transition:opacity .3s}.rhit .c{color:#4ade80}.rhit .p{color:#f87171}
-.rsub{font-size:12px;color:#6ee7b7;opacity:.8;margin-top:4px}
+/* wireframe AI scanning hero */
+#banner.wire{background:radial-gradient(120% 90% at 50% 0%,#0a1a3a 0%,#060f24 55%,#040914 100%);padding:12px 10px 14px;border:1px solid rgba(56,189,248,.22)}
+.wtop{display:flex;justify-content:space-between;align-items:center;margin:0 4px 8px;font-size:11px;color:#7dd3fc;letter-spacing:1.5px;text-transform:uppercase}
+.wtop b{font-size:13px;color:#e0f2fe;letter-spacing:.5px;text-transform:none;transition:opacity .4s}
+.steps{display:flex;gap:6px;justify-content:center;margin:0 0 8px}
+.steps span{font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(56,189,248,.25);color:#5b7aa6;transition:all .4s}
+.steps span.on{color:#e0f2fe;border-color:#38bdf8;background:rgba(56,189,248,.16);box-shadow:0 0 12px rgba(56,189,248,.35)}
+.wcv{display:block;width:100%;height:210px}
+.wread{margin-top:8px;font-size:15px;font-weight:700;color:#dbeafe;min-height:20px}.wread .u{color:#4ade80}.wread .d{color:#f87171}
+.wsub{font-size:12px;color:#7aa2d6;margin-top:4px}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.6)}100%{box-shadow:0 0 0 18px rgba(59,130,246,0)}}
 /* ranked pair cards */
 .lh{display:flex;justify-content:space-between;align-items:baseline;margin:14px 2px 2px}.lh b{font-size:15px}.lh span{font-size:11px;color:var(--mut)}
@@ -803,75 +806,96 @@ function reasonsFor(x){const r=[];
   x.d.ro.pats.forEach(q=>{if(q[1]===x.dir)r.push(q[0]);});x.d.ro.hp.forEach(q=>{if(q[1]===x.dir)r.push("15m "+q[0]);});
   x.d.ro.items.forEach(q=>{if(q.dir===x.dir)r.push(q.k+" "+q.txt);});return r;}
 let heroKey="";
-/* ---- radar scanning animation: rotating sweep, rings, one blip per pair (green CALL lean, red PUT lean, closer to centre = stronger) ---- */
+/* ---- blue wireframe AI animation: per pair, 1) collect data  2) analyse (EMA, Bollinger, scan)  3) predict up/down cone ---- */
 let scanRAF=null;
 function startScan(){
   const cv=$("scCv");if(!cv)return;
-  const dpr=Math.min(2,window.devicePixelRatio||1),Z=cv.clientWidth||300;cv.width=cv.height=Z*dpr;
+  const dpr=Math.min(2,window.devicePixelRatio||1),W=cv.clientWidth||340,H=210;cv.width=W*dpr;cv.height=H*dpr;
   const g=cv.getContext("2d");g.scale(dpr,dpr);
-  const C=Z/2,R=Z/2-10,PER=3600,t0=performance.now(),lastHit={};let hitP=null;
-  const TAU=Math.PI*2,norm=a=>((a%TAU)+TAU)%TAU;
-  function blips(){return S.pairs.map((p,i)=>{const x=verdict(p),has=!!x.d,conf=has?x.conf:50;
-    const ang=norm(i/S.pairs.length*TAU+0.6+i*0.37),rr=has?R*(0.9-Math.min(1,(conf-50)/40)*0.48):R*0.82;
-    return {p,i,x,has,ang,rr,col:!has?"148,163,184":x.dir>0?"74,222,128":"248,113,113"};});}
-  let B=blips(),lastB=0;
+  const CYC=10500,P1=3200,P2=6800,N=56,X0=10,X1=W*0.68,TOP=16,BOT=H*0.70,t0=performance.now();
+  let idx=-1,D=null;
+  const lerp=(a,b,t)=>a+(b-a)*t,ease=t=>1-Math.pow(1-Math.min(1,Math.max(0,t)),3);
+  function prep(i){
+    const p=S.pairs[i%S.pairs.length],h=hist[p+"|"+tfm()];let c;
+    if(h&&h.length>N+25)c=h.slice(-(N+25)).map(x=>x.c);
+    else{c=[];const ph=p.length+i;for(let j=0;j<N+25;j++)c.push(Math.sin(j/7+ph)*0.8+Math.sin(j/17+ph)*1.4+Math.sin(j*1.9)*0.12);}
+    const ema=[],k=2/21;c.forEach((v,j)=>ema.push(j?v*k+ema[j-1]*(1-k):v));
+    const up=[],lo=[];for(let j=0;j<c.length;j++){const w=c.slice(Math.max(0,j-19),j+1),m=w.reduce((a,b)=>a+b,0)/w.length,sd=Math.sqrt(w.reduce((a,b)=>a+(b-m)**2,0)/w.length);up.push(m+2*sd);lo.push(m-2*sd);}
+    const sl=a=>a.slice(-N),C=sl(c),E=sl(ema),U=sl(up),L=sl(lo);
+    let mn=Math.min(...L,...C),mx=Math.max(...U,...C);const pad=(mx-mn)*0.25||1;mn-=pad;mx+=pad;
+    const v=verdict(p),has=!!v.d;
+    D={p,C,E,U,L,mn,mx,has,dir:has?v.dir:(C[N-1]>=C[N-8]?1:-1),conf:has?v.conf:null,win:has?v.win:null,jpy:p.includes("JPY"),real:!!(h&&h.length>N+25)};
+    const e=$("scPair");if(e){e.style.opacity=0;setTimeout(()=>{e.textContent=p;e.style.opacity=1;},250);}
+  }
+  const X=j=>lerp(X0,X1,j/(N-1)),Y=v=>lerp(BOT,TOP,(v-D.mn)/(D.mx-D.mn));
+  function line(arr,n,col,w,dash){g.beginPath();for(let j=0;j<n;j++){const x=X(j),y=Y(arr[j]);j?g.lineTo(x,y):g.moveTo(x,y);}
+    g.strokeStyle=col;g.lineWidth=w;g.setLineDash(dash||[]);g.stroke();g.setLineDash([]);}
+  function floor(el){                       // perspective wireframe floor moving toward the viewer
+    const hz=BOT+8,vp=W/2;g.lineWidth=1;
+    for(let k=-10;k<=10;k++){g.beginPath();g.moveTo(vp+k*8,hz);g.lineTo(vp+k*70,H);g.strokeStyle="rgba(56,189,248,0.16)";g.stroke();}
+    const sp=(el/1400)%1;for(let k=0;k<7;k++){const t=(k+sp)/7,y=hz+(H-hz)*t*t;g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.strokeStyle=`rgba(56,189,248,${0.06+0.2*t})`;g.stroke();}
+  }
   function frame(now){
     if(heroKey!=="scan"||!cv.isConnected){scanRAF=null;return;}
-    const el=Math.max(0,now-t0),sweep=reduced?0.8:norm(el/PER*TAU-Math.PI/2);
-    if(now-lastB>1000){B=blips();lastB=now;}
-    g.clearRect(0,0,Z,Z);
-    // scope background
-    const bg=g.createRadialGradient(C,C,0,C,C,R);bg.addColorStop(0,"rgba(16,64,40,0.55)");bg.addColorStop(1,"rgba(4,20,14,0.2)");
-    g.beginPath();g.arc(C,C,R,0,TAU);g.fillStyle=bg;g.fill();
-    // rings + crosshair
-    g.strokeStyle="rgba(74,222,128,0.22)";g.lineWidth=1;
-    for(let k=1;k<=4;k++){g.beginPath();g.arc(C,C,R*k/4,0,TAU);g.stroke();}
-    g.beginPath();g.moveTo(C-R,C);g.lineTo(C+R,C);g.moveTo(C,C-R);g.lineTo(C,C+R);g.stroke();
-    g.setLineDash([2,6]);g.beginPath();g.moveTo(C-R*0.707,C-R*0.707);g.lineTo(C+R*0.707,C+R*0.707);g.moveTo(C+R*0.707,C-R*0.707);g.lineTo(C-R*0.707,C+R*0.707);g.stroke();g.setLineDash([]);
-    // rotating outer tick ring
-    const rot=reduced?0:el/24000*TAU;
-    for(let k=0;k<72;k++){const a=k/72*TAU+rot,l=k%6===0?8:4;g.strokeStyle=k%6===0?"rgba(134,239,172,0.7)":"rgba(74,222,128,0.3)";
-      g.beginPath();g.moveTo(C+Math.cos(a)*(R+1),C+Math.sin(a)*(R+1));g.lineTo(C+Math.cos(a)*(R+1+l),C+Math.sin(a)*(R+1+l));g.stroke();}
-    // sweep trail
-    const TR=1.25;
-    if(g.createConicGradient){const cg=g.createConicGradient(sweep-TR,C,C);cg.addColorStop(0,"rgba(74,222,128,0)");cg.addColorStop(TR/TAU,"rgba(74,222,128,0.42)");cg.addColorStop(TR/TAU+0.0001,"rgba(74,222,128,0)");cg.addColorStop(1,"rgba(74,222,128,0)");
-      g.beginPath();g.moveTo(C,C);g.arc(C,C,R,sweep-TR,sweep);g.closePath();g.fillStyle=cg;g.fill();}
-    else for(let k=0;k<24;k++){const a1=sweep-TR*(k+1)/24,a2=sweep-TR*k/24;g.beginPath();g.moveTo(C,C);g.arc(C,C,R,a1,a2);g.closePath();g.fillStyle=`rgba(74,222,128,${0.4*(1-k/24)})`;g.fill();}
-    // sweep line
-    g.strokeStyle="rgba(187,247,208,0.95)";g.lineWidth=2;g.shadowColor="#4ade80";g.shadowBlur=12;
-    g.beginPath();g.moveTo(C,C);g.lineTo(C+Math.cos(sweep)*R,C+Math.sin(sweep)*R);g.stroke();g.shadowBlur=0;
-    // blips: flare when the beam passes, then fade like phosphor
-    for(const b of B){
-      const d=norm(sweep-b.ang);if(d<0.08&&(!lastHit[b.p]||now-lastHit[b.p]>PER*0.5)){lastHit[b.p]=now;hitP=b;showHit(b);}
-      const age=lastHit[b.p]?(now-lastHit[b.p])/PER:1,a=reduced?0.9:Math.max(0.18,1-age*0.85);
-      const x=C+Math.cos(b.ang)*b.rr,y=C+Math.sin(b.ang)*b.rr,sz=b.has?3+Math.max(0,(b.x.conf-50)/12):3;
-      if(age<0.35&&!reduced){const ring=sz+age*60;g.beginPath();g.arc(x,y,ring,0,TAU);g.strokeStyle=`rgba(${b.col},${0.5*(1-age/0.35)})`;g.lineWidth=1.5;g.stroke();}
-      g.beginPath();g.arc(x,y,sz+3,0,TAU);g.fillStyle=`rgba(${b.col},${0.18*a})`;g.fill();
-      g.beginPath();g.arc(x,y,sz,0,TAU);g.fillStyle=`rgba(${b.col},${a})`;g.shadowColor=`rgb(${b.col})`;g.shadowBlur=10*a;g.fill();g.shadowBlur=0;
-      g.font="600 10px system-ui,sans-serif";g.fillStyle=`rgba(220,252,231,${0.35+0.6*a})`;g.textAlign=x>C?"right":"left";
-      g.fillText(b.p,x+(x>C?-sz-5:sz+5),b.i%2?y+sz+11:y-sz-2);
-    }
-    // centre pulse
-    const pr=reduced?0:(el%2000)/2000;g.beginPath();g.arc(C,C,4+pr*R*0.25,0,TAU);g.strokeStyle=`rgba(134,239,172,${0.5*(1-pr)})`;g.lineWidth=1.5;g.stroke();
-    g.beginPath();g.arc(C,C,3.5,0,TAU);g.fillStyle="#bbf7d0";g.fill();
-    if(reduced){scanRAF=null;if(!hitP&&B[0])showHit(B[0]);return;}
+    const el=Math.max(0,now-t0),ci=Math.floor(el/CYC),tc=reduced?CYC*0.9:el%CYC;
+    if(ci!==idx){idx=ci;prep(ci);}
+    const stage=tc<P1?0:tc<P2?1:2;
+    for(let k=0;k<3;k++){const e=$("st"+k);if(e)e.classList.toggle("on",k===stage);}
+    g.clearRect(0,0,W,H);
+    // background wire grid (slowly drifting left = chart moving)
+    const drift=(el/60)%24;g.lineWidth=1;g.strokeStyle="rgba(96,165,250,0.08)";
+    for(let x=-drift;x<W;x+=24){g.beginPath();g.moveTo(x,TOP-8);g.lineTo(x,BOT);g.stroke();}
+    for(let y=TOP;y<=BOT;y+=22){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();}
+    floor(el);
+    const fade=tc>CYC-500?(CYC-tc)/500:1;g.globalAlpha=fade;
+    // 1) COLLECT: points stream in from the right
+    const n=Math.max(2,Math.round(ease(tc/(P1*0.9))*N));
+    if(stage===0){for(let q=0;q<6;q++){const t=((el/700)+q/6)%1,j=Math.min(N-1,n+q),x=lerp(W,X(j),t),y=Y(D.C[j]);
+        g.fillStyle=`rgba(125,211,252,${0.8*(1-t)})`;g.fillRect(x-1.5,y-1.5,3,3);}}
+    // vertical wire drops under the price line (wireframe look)
+    for(let j=0;j<n;j+=2){const x=X(j),y=Y(D.C[j]);g.beginPath();g.moveTo(x,y);g.lineTo(x,BOT);g.strokeStyle="rgba(56,189,248,0.10)";g.stroke();}
+    line(D.C,n,"#7dd3fc",1.4);
+    for(let j=0;j<n;j+=4){g.beginPath();g.arc(X(j),Y(D.C[j]),1.6,0,7);g.fillStyle="#bae6fd";g.fill();}
+    // 2) ANALYSE: indicators draw in, scan bar sweeps, pattern rings
+    if(stage>=1){const t=stage===1?ease((tc-P1)/(P2-P1-600)):1,m=Math.max(2,Math.round(t*N));
+      line(D.U,m,"rgba(147,197,253,0.45)",1,[3,4]);line(D.L,m,"rgba(147,197,253,0.45)",1,[3,4]);line(D.E,m,"#a78bfa",1.2);
+      if(stage===1){const sx=lerp(X0,X1,Math.min(1,(tc-P1)/(P2-P1)));const gr=g.createLinearGradient(sx-30,0,sx,0);gr.addColorStop(0,"rgba(56,189,248,0)");gr.addColorStop(1,"rgba(56,189,248,0.25)");
+        g.fillStyle=gr;g.fillRect(sx-30,TOP-8,30,BOT-TOP+8);g.fillStyle="#7dd3fc";g.fillRect(sx,TOP-8,1,BOT-TOP+8);}
+      for(let j=6;j<m;j+=11){const r=4+2*Math.sin(el/250+j);g.beginPath();g.arc(X(j),Y(D.C[j]),r,0,7);g.strokeStyle="rgba(250,204,21,0.55)";g.lineWidth=1;g.stroke();}
+      g.font="600 10px system-ui,sans-serif";g.fillStyle="rgba(167,139,250,0.9)";g.textAlign="left";g.fillText("EMA 20",X0+2,TOP+2);
+      g.fillStyle="rgba(147,197,253,0.8)";g.fillText("Bollinger",X0+48,TOP+2);g.fillStyle="rgba(250,204,21,0.8)";g.fillText("patterns",X0+104,TOP+2);}
+    // 3) PREDICT: wireframe cone fanning up or down from the last price
+    const lx=X(N-1),ly=Y(D.C[N-1]),col=D.dir>0?"74,222,128":"248,113,113";
+    if(stage===2){const t=ease((tc-P2)/1600),len=(W-12-lx)*t,span=(BOT-TOP)*0.42*t,mid=-D.dir*span*0.75;
+      for(let r=0;r<7;r++){const f=(r-3)/3,ey=ly+mid+f*span*0.45;g.beginPath();g.moveTo(lx,ly);g.lineTo(lx+len,ey);
+        g.strokeStyle=`rgba(${col},${r===3?0.95:0.25})`;g.lineWidth=r===3?1.6:1;g.setLineDash(r===3?[5,4]:[]);g.stroke();}
+      g.setLineDash([]);
+      for(let k=1;k<=4;k++){const x=lx+len*k/4,s=span*0.45*k/4;g.beginPath();g.moveTo(x,ly+mid*k/4-s);g.lineTo(x,ly+mid*k/4+s);g.strokeStyle=`rgba(${col},0.22)`;g.stroke();}
+      if(t>0.95){const ax=lx+len,ay=ly+mid,pu=1+0.15*Math.sin(el/180);g.beginPath();
+        g.moveTo(ax,ay-D.dir*9*pu);g.lineTo(ax-6*pu,ay+D.dir*3*pu);g.lineTo(ax+6*pu,ay+D.dir*3*pu);g.closePath();g.fillStyle=`rgb(${col})`;g.shadowColor=`rgb(${col})`;g.shadowBlur=12;g.fill();g.shadowBlur=0;}}
+    // live price head
+    const hx=X(n-1),hy=Y(D.C[n-1]),pr=2.5+1.5*Math.sin(el/200);
+    g.beginPath();g.arc(hx,hy,pr+4,0,7);g.fillStyle="rgba(125,211,252,0.18)";g.fill();g.beginPath();g.arc(hx,hy,pr,0,7);g.fillStyle="#e0f2fe";g.fill();
+    if(D.real){g.font="600 10px system-ui,sans-serif";g.textAlign="right";g.fillStyle="#bae6fd";g.fillText(D.C[n-1].toFixed(D.jpy?3:5),W-6,TOP+2);}
+    g.globalAlpha=1;
+    const e=$("scHit");if(e){const txt=stage===0?`Collecting ${n} of ${N} candles...`:stage===1?`Analysing indicators, candle patterns and trend... ${Math.round(ease((tc-P1)/(P2-P1))*100)}%`
+      :!D.has?"Prediction: waiting for live data":`Prediction: <span class="${D.dir>0?"u":"d"}">${D.dir>0?"▲ UP":"▼ DOWN"}</span> · confidence ${D.conf}%${D.win?` · win ${pct(D.win)}`:""}`;
+      if(e._t!==txt){e._t=txt;e.innerHTML=txt;}}
+    if(reduced){scanRAF=null;return;}
     scanRAF=requestAnimationFrame(frame);
   }
-  function showHit(b){const e=$("scHit");if(!e)return;
-    if(!b.has){e.innerHTML=`${esc(b.p)} · <span style="opacity:.7">loading data...</span>`;return;}
-    const x=b.x,cls=x.dir>0?"c":"p";
-    e.innerHTML=`${esc(b.p)} · <span class="${cls}">${x.dir>0?"▲ CALL":"▼ PUT"} lean ${x.conf}%</span>${x.win?` · win ${pct(x.win)}`:""}`;}
   if(scanRAF)cancelAnimationFrame(scanRAF);scanRAF=requestAnimationFrame(frame);
 }
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&heroKey==="scan"&&!scanRAF)startScan();});
 function bannerHtml(){
   const b=$("banner"),c=pickSetup(),now=Date.now();
   if(!c){const tf=TF(),nxt=Math.ceil(now/tf)*tf,key="scan";
-    if(heroKey!==key){heroKey=key;b.className="radarh";
-      b.innerHTML=`<div class="rtop"><span><span class="rlive"></span><b>Radar scan</b></span><span>${S.pairs.length} pairs · ${S.exp} min</span></div>
-       <canvas class="rcv" id="scCv"></canvas>
-       <div class="rhit" id="scHit">Sweeping...</div>
-       <div class="rsub">No signal locked yet. Next ${tfm()}m candle closes at <b data-next="1">${uS(nxt)}</b> UAE</div>`;
+    if(heroKey!==key){heroKey=key;b.className="wire";
+      b.innerHTML=`<div class="wtop"><span>AI analysis · <b id="scPair">${esc(S.pairs[0])}</b></span><span>${S.pairs.length} pairs · ${S.exp} min</span></div>
+       <div class="steps"><span id="st0">1 Collect</span><span id="st1">2 Analyse</span><span id="st2">3 Predict</span></div>
+       <canvas class="wcv" id="scCv"></canvas>
+       <div class="wread" id="scHit">Collecting data...</div>
+       <div class="wsub">No signal locked yet. Next ${tfm()}m candle closes at <b data-next="1">${uS(nxt)}</b> UAE</div>`;
       startScan();}
     const n=b.querySelector("[data-next]");if(n)n.textContent=uS(nxt);return;}
   const closeT=c.s.closeT,until=closeT+WIN[S.exp]*1000,expiryAt=closeT+S.exp*60000,ok=c.kind==="signal";

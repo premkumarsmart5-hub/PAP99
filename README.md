@@ -1,8 +1,8 @@
-# AI Trader: IQ Option signal indicator (5 / 10 / 15 min)
+# Premamulu: IQ Option signal indicator (5 / 10 / 15 min)
 
 Two tools that give **CALL / PUT** signals with an **entry time and expiry time**. They only show signals and never place trades.
 
-## 1. AI Trader web app (`index.html`), the main tool
+## 1. Premamulu web app (`index.html`), the main tool
 Open it on your phone (it can be installed as an app). Paste a free [Twelve Data](https://twelvedata.com) API key, pick your IQ Option payout, then tap **Start**.
 
 * Choose an expiry: **5, 10 or 15 min**. Every expiry uses 5-minute candles. An entry is made at the candle close, and the expiry falls 1, 2 or 3 candles later. Those times line up with IQ Option's clock-based expiries.

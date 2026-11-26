@@ -1,12 +1,12 @@
 # Premamulu OTC (separate app for IQ Option OTC pairs)
 
 This is a completely separate app from Premamulu, with its own server, page, name, icon, settings and trade log.
-It reads **OTC candles from your IQ Option demo account** and runs the same analysis as Premamulu: indicators, 32 candle patterns, 15m/1h trend, the AI models and the proven-history checks. It then gives CALL/PUT signals for 5, 10 or 15 minutes.
+It reads **OTC candles from your IQ Option demo account** and runs the same analysis as Premamulu: indicators, 32 candle patterns, 15m/1h trend, the AI models and the proven-history checks. It then gives CALL/PUT signals for **2, 3 or 5 minutes** (OTC maximum), using 1-minute candles.
 
 Pairs: **EUR/USD-OTC, GBP/USD-OTC, USD/JPY-OTC, EUR/JPY-OTC**.
 
 ## How it works
-`server.py` runs inside **Termux** on your phone. It logs in to IQ Option, downloads the 5-minute OTC candles, and shows the app at **http://localhost:8080** in Chrome on the same phone. Nothing runs on GitHub.
+`server.py` runs inside **Termux** on your phone. It logs in to IQ Option, downloads the 1-minute OTC candles, and shows the app at **http://localhost:8080** in Chrome on the same phone. Nothing runs on GitHub.
 
 * **Read-only.** The server has no code that can place trades. It only downloads candles.
 * **Your password** is typed in Termux and sent only to IQ Option over HTTPS with certificate checking. It is not saved unless you create `config.env` yourself, and that file is never uploaded.

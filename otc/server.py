@@ -29,7 +29,7 @@ WEB = os.path.join(HERE, "web")
 UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
 AUTH_URL = "https://auth.iqoption.com/api/v2/login"
 WS_URL = "wss://iqoption.com/echo/websocket"
-CANDLE_SECONDS = 300  # 5-minute candles, same as Premamulu
+CANDLE_SECONDS = 60  # 1-minute candles: OTC expiries are 2, 3 and 5 minutes
 
 # IQ Option asset ids for OTC pairs (from the iqoptionapi constants table)
 ASSETS = {"EURUSD-OTC": 76, "EURGBP-OTC": 77, "USDCHF-OTC": 78, "EURJPY-OTC": 79, "NZDUSD-OTC": 80,

@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0f17">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Premamulu OTC">
+<meta name="application-name" content="Premamulu OTC">
+<title>Premamulu OTC</title>
+<style>
+:root{--bg:#0b0f17;--card:#161d2b;--tx:#e6ebf5;--mut:#8b98b0;--up:#17803f;--dn:#b02a2a;--acc:#3b82f6}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--tx);font-family:system-ui,sans-serif;padding:12px;max-width:560px}
+h1{font-size:18px;margin:4px 0 8px}h2{font-size:15px;margin:14px 0 6px}
+#seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0}
+#seg button{background:var(--card);color:var(--mut);padding:14px 0;font-size:17px;margin:0;border:2px solid transparent}
+#seg button.on{background:var(--acc);color:#fff}
+#banner{background:var(--card);border-radius:14px;padding:16px;text-align:center;margin-top:6px}
+#banner.call{background:var(--up);color:#fff}#banner.put{background:var(--dn);color:#fff}
+#banner.unv{border:2px dashed #ffd27d}
+#banner .big{font-size:26px;font-weight:800}#banner .line{font-size:14px;margin-top:6px}
+.logb{background:rgba(0,0,0,.35);margin-top:10px;font-size:14px;padding:10px}
+#clock{text-align:center;color:var(--mut);margin:8px 0;font-size:13px}
+.card{background:var(--card);border-radius:10px;padding:12px;margin:6px 0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card b{font-size:16px}small{display:block;color:var(--mut);margin-top:4px;font-size:12px}
+small.ok{color:#6fdc8c}small.bad{color:#e9a36a}.sm{font-size:12px;font-weight:600;color:var(--mut);padding:4px 0}
+.tag{padding:7px 10px;border-radius:8px;font-weight:700;font-size:13px;background:#27324a;color:var(--mut);text-align:center;min-width:88px}
+.tag.call{background:var(--up);color:#fff}.tag.put{background:var(--dn);color:#fff}.tag.weak{border:1px dashed #ffd27d;color:#ffd27d}
+.chips2{margin-top:6px}.chip{display:inline-block;font-size:11px;padding:3px 7px;border-radius:6px;background:#222c40;margin:2px 3px 2px 0;color:var(--mut)}
+.chip.up{background:#14452a;color:#9be3b3}.chip.dn{background:#4b1d1d;color:#ffb0b0}
+input[type=text],select,button{font-size:16px;padding:12px;border-radius:10px;border:0;width:100%;margin:4px 0}
+input[type=text],select{background:var(--card);color:var(--tx)}
+button{background:var(--acc);color:#fff;font-weight:700}button:disabled{opacity:.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips label{display:inline-block;background:var(--card);border-radius:8px;padding:8px 10px;margin:3px 3px 3px 0;font-size:14px}
+.note{color:var(--mut);font-size:12px;margin:8px 0}label.note{display:block}
+.lg{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card);border-radius:8px;padding:8px 10px;margin:4px 0;font-size:12px}
+.mini{width:auto;padding:6px 10px;margin:0 0 0 4px;font-size:12px}.mini.w{background:var(--up)}.mini.l{background:var(--dn)}
+.res{font-weight:800;padding:4px 8px;border-radius:6px}.res.W{background:var(--up)}.res.L{background:var(--dn)}
+.bt{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}.bt td,.bt th{padding:6px 4px;text-align:center;border-bottom:1px solid #27324a}
+.bt th{color:var(--mut);font-weight:600}.bt td:first-child,.bt th:first-child{text-align:left}.bt .g{color:#6fdc8c;font-weight:700}.bt .win{background:#14452a;border-radius:6px}
+.callt{color:#6fdc8c}.putt{color:#ff8a8a}
+iframe{width:100%;height:340px;border:0;border-radius:10px;background:#000}
+:root{--up2:#22c55e;--dn2:#ef4444;--trk:#0e1422}
+/* hero signal */
+#banner{position:relative;overflow:hidden;border-radius:18px;padding:18px 16px;text-align:center;background:var(--card);margin-top:8px;transition:background .4s}
+#banner.call{background:linear-gradient(160deg,#0b3d24 0%,#15803d 100%);animation:glowU 2.2s ease-in-out infinite}
+#banner.put{background:linear-gradient(160deg,#4a0f0f 0%,#b91c1c 100%);animation:glowD 2.2s ease-in-out infinite}
+#banner.unv{border:2px dashed #ffd27d;animation:none}
+@keyframes glowU{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}50%{box-shadow:0 0 30px 4px rgba(34,197,94,.55)}}
+@keyframes glowD{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 30px 4px rgba(239,68,68,.55)}}
+.hpair{font-size:20px;font-weight:800;letter-spacing:.5px}.hrank{display:inline-block;font-size:11px;font-weight:800;background:#fbbf24;color:#111;border-radius:20px;padding:2px 8px;margin-bottom:6px}
+.hdir{font-size:52px;font-weight:900;line-height:1.05;margin:4px 0;display:flex;align-items:center;justify-content:center;gap:10px}
+.arw{display:inline-block;animation:bobU 1.1s ease-in-out infinite}#banner.put .arw{animation-name:bobD}
+@keyframes bobU{50%{transform:translateY(-7px)}}@keyframes bobD{50%{transform:translateY(7px)}}
+.hstats{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;margin:10px 0 6px}
+.hstat{background:rgba(0,0,0,.28);border-radius:12px;padding:8px}.hstat b{display:block;font-size:24px}.hstat span{font-size:11px;opacity:.85}
+.ring{width:74px;height:74px;position:relative}.ring svg{transform:rotate(-90deg)}.ring circle{fill:none;stroke-width:6}
+.ring .bg{stroke:rgba(0,0,0,.3)}.ring .fg{stroke:#fff;stroke-linecap:round;transition:stroke-dashoffset 1s linear}
+.ring div{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:15px}
+.hline{font-size:14px;margin-top:6px}.hiq{margin-top:8px;background:rgba(0,0,0,.3);border-radius:10px;padding:9px;font-size:15px}
+.pop{animation:pop .5s cubic-bezier(.2,1.4,.4,1)}@keyframes pop{from{transform:scale(.9);opacity:.2}}
+.scan{background:linear-gradient(100deg,var(--card) 30%,#1f2b45 50%,var(--card) 70%) 0 0/250% 100%;animation:shim 1.8s linear infinite}
+@keyframes shim{to{background-position:-250% 0}}
+.radar{width:46px;height:46px;margin:0 auto 6px;border-radius:50%;border:2px solid #3b82f6;position:relative;animation:pulse 1.6s ease-out infinite}
+/* wireframe AI scanning hero */
+#banner.wire{background:radial-gradient(120% 90% at 50% 0%,#0a1a3a 0%,#060f24 55%,#040914 100%);padding:12px 10px 14px;border:1px solid rgba(56,189,248,.22)}
+.wtop{display:flex;justify-content:space-between;align-items:center;margin:0 4px 8px;font-size:11px;color:#7dd3fc;letter-spacing:1.5px;text-transform:uppercase}
+.wtop b{font-size:13px;color:#e0f2fe;letter-spacing:.5px;text-transform:none;transition:opacity .4s}
+.steps{display:flex;gap:6px;justify-content:center;margin:0 0 8px}
+.steps span{font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(56,189,248,.25);color:#5b7aa6;transition:all .4s}
+.steps span.on{color:#e0f2fe;border-color:#38bdf8;background:rgba(56,189,248,.16);box-shadow:0 0 12px rgba(56,189,248,.35)}
+.wcv{display:block;width:100%;height:210px}
+.wread{margin-top:8px;font-size:15px;font-weight:700;color:#dbeafe;min-height:20px}.wread .u{color:#4ade80}.wread .d{color:#f87171}
+.wsub{font-size:12px;color:#7aa2d6;margin-top:4px}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.6)}100%{box-shadow:0 0 0 18px rgba(59,130,246,0)}}
+/* ranked pair cards */
+.lh{display:flex;justify-content:space-between;align-items:baseline;margin:14px 2px 2px}.lh b{font-size:15px}.lh span{font-size:11px;color:var(--mut)}
+.pc{background:var(--card);border-radius:14px;padding:12px;margin:8px 0;border-left:5px solid #2a3550;transition:background .5s,border-color .5s}
+.pc.call{border-left-color:var(--up2)}.pc.put{border-left-color:var(--dn2)}
+.pc.sig.call{background:linear-gradient(90deg,rgba(34,197,94,.18),var(--card) 65%)}.pc.sig.put{background:linear-gradient(90deg,rgba(239,68,68,.18),var(--card) 65%)}
+.pc.enter{animation:enter .55s cubic-bezier(.2,.8,.2,1) both}@keyframes enter{from{opacity:0;transform:translateY(14px) scale(.98)}}
+.pc.flash{animation:flash 1s ease-out}@keyframes flash{0%{box-shadow:0 0 0 3px rgba(255,255,255,.7)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
+.r1{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.rk{width:32px;height:32px;border-radius:50%;background:#27324a;display:grid;place-items:center;font-weight:900;font-size:14px}
+.rk.g{background:linear-gradient(135deg,#f59e0b,#fde047);color:#111}.rk.s{background:linear-gradient(135deg,#94a3b8,#e2e8f0);color:#111}.rk.b{background:linear-gradient(135deg,#b45309,#f59e0b);color:#111}
+.pn{font-size:17px;font-weight:800}.pp{font-size:11px;color:var(--mut)}
+.pill{font-weight:900;font-size:17px;padding:9px 10px;border-radius:11px;min-width:100px;text-align:center;letter-spacing:.5px}
+.pill.call{background:var(--up2);color:#03140a}.pill.put{background:var(--dn2);color:#fff}
+.pill.lean{background:transparent;border:2px dashed;font-size:15px}.pill.lean.call{color:var(--up2);border-color:var(--up2)}.pill.lean.put{color:#ff8a8a;border-color:var(--dn2)}
+.pill.wait{background:#27324a;color:var(--mut);font-size:14px}
+.mt{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.mt .lb{font-size:11px;color:var(--mut);display:flex;justify-content:space-between}
+.mt .lb b{color:var(--tx);font-size:15px}.bar{height:8px;background:var(--trk);border-radius:6px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;width:100%;transform-origin:left;border-radius:6px;background:linear-gradient(90deg,#3b82f6,#22c55e)}
+.bar.w i{background:linear-gradient(90deg,#a855f7,#f59e0b)}
+.bd{display:grid;grid-template-columns:104px 1fr 34px;gap:4px 8px;align-items:center;margin-top:10px;font-size:11px;color:var(--mut)}
+.dv{position:relative;height:7px;background:var(--trk);border-radius:4px}.dv::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:#4a5677}
+.dv i{position:absolute;left:50%;top:0;height:100%;width:50%;transform-origin:left;border-radius:0 4px 4px 0}.dv i.up{background:var(--up2)}.dv i.dn{background:var(--dn2)}
+.bd .vv{text-align:right;font-weight:700}.vv.up{color:#6fdc8c}.vv.dn{color:#ff8a8a}
+.st{margin-top:9px;font-size:12px;padding:7px 9px;border-radius:9px;background:#1b2436;color:var(--mut)}.st.ok{background:#123522;color:#a7f3c0}.st.off{background:#3a2a12;color:#fcd38d}
+.upd{float:right;font-size:10px;color:#7db4ff;animation:blink 1s steps(2) infinite}@keyframes blink{50%{opacity:.3}}
+.sk{height:12px;border-radius:6px;margin-top:8px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+summary{cursor:pointer;font-weight:700;padding:8px 0}
+</style></head>
+<body>
+<h1>Premamulu OTC: IQ Option OTC signals, 2 / 3 / 5 min (UAE time)</h1>
+
+<div id="setup">
+  <p class="note">OTC candles come from your IQ Option demo account through the Premamulu OTC server running in Termux on this phone. Keep Termux open, choose your OTC payout, tap Start. Keep the screen on.</p>
+  <p class="note" id="srv">Checking the Termux server...</p>
+  <label class="note">Your IQ Option payout (check on the asset)</label>
+  <select id="payout"><option value="80">80%</option><option value="85" selected>85%</option><option value="90">90%</option></select>
+  <button id="start">Start</button>
+</div>
+
+<div id="main" style="display:none">
+  <div id="seg"><button data-e="2">2 min</button><button data-e="3">3 min</button><button data-e="5">5 min</button></div>
+  <div id="banner"></div>
+  <div id="clock"></div>
+  <div class="grid">
+    <button id="refresh">Analyse now</button>
+    <select id="payout2"><option value="80">Payout 80%</option><option value="85">Payout 85%</option><option value="90">Payout 90%</option></select>
+  </div>
+  <button id="bestBtn" style="background:#6d28d9">Find best expiry (tests 2, 3, 5 min on all pairs)</button>
+  <div id="best"></div>
+  <details class="card" style="padding:4px 12px"><summary>Settings and pairs</summary>
+  <label class="note"><input type="checkbox" id="auto" checked> Auto analyse at every candle close</label>
+  <label class="note"><input type="checkbox" id="strict" checked> Strict filter: 11:00-20:00 UAE only, skip volatile candles (off by default for OTC, which runs 24/7)</label>
+  <div class="chips" id="chips"></div>
+  <p class="note" id="credit"></p></details>
+  <div class="lh"><b>Pairs ranked by win analytics</b><span>best first · updates every candle</span></div>
+  <div id="warn"></div>
+  <div id="pairs"></div>
+
+
+  <h2>My trades (UAE time)</h2>
+  <p class="note" id="stats"></p>
+  <div id="log"></div>
+  <button id="clear" style="background:#27324a">Clear log</button>
+  <p class="note" id="status"></p>
+  <div class="grid"><button id="stop" style="background:#27324a">Back to start</button><button id="wipe" style="background:#4b1d1d">Forget all data</button></div>
+</div>
+
+<p class="note">How it works: for each pair the app downloads about 5000 one-minute candles and reads 49 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger squeeze, EMAs, RSI divergence, 32 candle patterns scored by location plus patterns on the 15-minute candle, support and resistance, 15-minute and 1-hour trend, time of day). Two AI models trained in the background (gradient-boosted trees + logistic regression) must agree on the direction for the chosen expiry (2, 3 or 5 min), and 10 classic strategies plus every candle pattern are tested on this pair's own history. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
+
+<script id="core">
+/* ===== CORE: indicators, candle patterns, strategy library, tree-boosting AI, validation ===== */
+const FN=["ret1","ret2","ret3","ret5","ret10","ret20","rsi14","rsi7","d20","d50","spread","pctb","vol_ratio","rng_atr","body","upw","lw","stoch",
+ "hr_sin","hr_cos","macd_h","macd_d","stK","stD","adx","di_diff","cci","aroon","d_hh50","d_ll50","d200","slope200","bull_pats","bear_pats","doji","inside","consec",
+ "h15_trend","h15_rsi","h15_macd","h60_trend","h60_rsi","h60_dist","squeeze","rsi_div",
+ "pat_bull_str","pat_bear_str","h15_pat_bull","h15_pat_bear"];
+const THR=[0.53,0.54,0.55,0.56,0.58,0.60,0.62];
+
+function emaArr(a,n){const k=2/(n+1),o=new Array(a.length);o[0]=a[0];for(let i=1;i<a.length;i++)o[i]=a[i]*k+o[i-1]*(1-k);return o;}
+function smaArr(a,n){const o=new Array(a.length).fill(NaN);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=n)s-=a[i-n];if(i>=n-1)o[i]=s/n;}return o;}
+function rsiArr(c,n){const out=new Array(c.length).fill(NaN);let ag=0,al=0;
+  for(let i=1;i<c.length;i++){const d=c[i]-c[i-1],g=Math.max(d,0),l=Math.max(-d,0);
+    if(i<=n){ag+=g/n;al+=l/n;if(i<n)continue;}else{ag=(ag*(n-1)+g)/n;al=(al*(n-1)+l)/n;}
+    out[i]=al===0?100:100-100/(1+ag/al);}
+  return out;}
+
+function buildInd(cs){
+  const n=cs.length,c=cs.map(x=>x.c),o=cs.map(x=>x.o),h=cs.map(x=>x.h),l=cs.map(x=>x.l),rng=h.map((v,i)=>v-l[i]);
+  const ind={n,c,o,h,l,rng,t:cs.map(x=>x.t)};
+  const atr=new Array(n).fill(NaN);let s=0;
+  for(let i=0;i<n;i++){s+=rng[i];if(i>=14)s-=rng[i-14];if(i>=13)atr[i]=s/14;}
+  ind.atr=atr;const pre=[0];for(let i=0;i<n;i++)pre.push(pre[i]+(isNaN(atr[i])?0:atr[i]));ind.atrPre=pre;
+  ind.e20=emaArr(c,20);ind.e50=emaArr(c,50);ind.e200=emaArr(c,200);ind.r14=rsiArr(c,14);ind.r7=rsiArr(c,7);
+  ind.bbm=smaArr(c,20);ind.bbs=new Array(n).fill(NaN);ind.lo=new Array(n).fill(NaN);ind.hi=new Array(n).fill(NaN);
+  for(let i=19;i<n;i++){let v=0;for(let j=i-19;j<=i;j++)v+=(c[j]-ind.bbm[i])**2;const sd=Math.sqrt(v/19);ind.bbs[i]=sd;ind.lo[i]=ind.bbm[i]-2*sd;ind.hi[i]=ind.bbm[i]+2*sd;}
+  const raw=new Array(n).fill(NaN);
+  for(let i=13;i<n;i++){let lo=Infinity,hi=-Infinity;for(let j=i-13;j<=i;j++){if(l[j]<lo)lo=l[j];if(h[j]>hi)hi=h[j];}raw[i]=100*(c[i]-lo)/(hi-lo+1e-12);}
+  ind.raw=raw;ind.K=smaArr(raw.map(v=>isNaN(v)?0:v),3);ind.D=smaArr(ind.K.map(v=>isNaN(v)?0:v),3);
+  const e12=emaArr(c,12),e26=emaArr(c,26);ind.macd=e12.map((v,i)=>v-e26[i]);ind.msig=emaArr(ind.macd,9);ind.hist=ind.macd.map((v,i)=>v-ind.msig[i]);
+  const N=14,pdi=new Array(n).fill(NaN),mdi=new Array(n).fill(NaN),adx=new Array(n).fill(NaN);let str=0,spd=0,smd=0,adxv=NaN;
+  for(let i=1;i<n;i++){
+    const up=h[i]-h[i-1],dn=l[i-1]-l[i],pdm=up>dn&&up>0?up:0,mdm=dn>up&&dn>0?dn:0,tr=Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1]));
+    if(i<=N){str+=tr;spd+=pdm;smd+=mdm;if(i<N)continue;}else{str=str-str/N+tr;spd=spd-spd/N+pdm;smd=smd-smd/N+mdm;}
+    pdi[i]=100*spd/(str+1e-12);mdi[i]=100*smd/(str+1e-12);
+    const dx=100*Math.abs(pdi[i]-mdi[i])/(pdi[i]+mdi[i]+1e-12);adxv=isNaN(adxv)?dx:adxv+(dx-adxv)/N;adx[i]=adxv;
+  }
+  ind.pdi=pdi;ind.mdi=mdi;ind.adx=adx;
+  const tp=cs.map(x=>(x.h+x.l+x.c)/3),tps=smaArr(tp,20),cci=new Array(n).fill(NaN);
+  for(let i=19;i<n;i++){let md=0;for(let j=i-19;j<=i;j++)md+=Math.abs(tp[j]-tps[i]);md/=20;cci[i]=(tp[i]-tps[i])/(0.015*md+1e-12);}
+  ind.cci=cci;
+  const au=new Array(n).fill(NaN),ad=new Array(n).fill(NaN),hh20=new Array(n).fill(NaN),ll20=new Array(n).fill(NaN),hh50=new Array(n).fill(NaN),ll50=new Array(n).fill(NaN);
+  for(let i=50;i<n;i++){
+    let ih=i,il=i;for(let j=i-14;j<=i;j++){if(h[j]>=h[ih])ih=j;if(l[j]<=l[il])il=j;}
+    au[i]=100*(14-(i-ih))/14;ad[i]=100*(14-(i-il))/14;
+    let a=-Infinity,b=Infinity;for(let j=i-20;j<i;j++){if(h[j]>a)a=h[j];if(l[j]<b)b=l[j];}hh20[i]=a;ll20[i]=b;
+    a=-Infinity;b=Infinity;for(let j=i-50;j<i;j++){if(h[j]>a)a=h[j];if(l[j]<b)b=l[j];}hh50[i]=a;ll50[i]=b;
+  }
+  ind.au=au;ind.ad=ad;ind.hh20=hh20;ind.ll20=ll20;ind.hh50=hh50;ind.ll50=ll50;
+  let tf=Infinity;for(let i=1;i<Math.min(n,80);i++){const d=ind.t[i]-ind.t[i-1];if(d>0&&d<tf)tf=d;}ind.tf=isFinite(tf)?tf:300000;
+  /* RSI divergence: price makes a new 10-candle extreme but RSI does not */
+  const dv=new Array(n).fill(0);
+  for(let i=15;i<n;i++){let jl=i-12,jh=i-12;for(let j=i-12;j<=i-3;j++){if(l[j]<l[jl])jl=j;if(h[j]>h[jh])jh=j;}
+    if(l[i]<l[jl]&&ind.r14[i]>ind.r14[jl]+2)dv[i]=1;else if(h[i]>h[jh]&&ind.r14[i]<ind.r14[jh]-2)dv[i]=-1;}
+  ind.div=dv;
+  ind.h15=htf(ind,15);ind.h60=htf(ind,60);
+  return ind;
+}
+/* higher-timeframe view built from the same candles (no extra credits, no look-ahead: only CLOSED higher candles are used) */
+function htf(ind,mins){
+  const n=ind.n,H=mins*60000,map=new Int32Array(n).fill(-1),bars=[];let cur=null;
+  for(let i=0;i<n;i++){const b=Math.floor(ind.t[i]/H);
+    if(!cur||cur.b!==b){cur={b,o:ind.o[i],h:ind.h[i],l:ind.l[i],c:ind.c[i]};bars.push(cur);}
+    else{if(ind.h[i]>cur.h)cur.h=ind.h[i];if(ind.l[i]<cur.l)cur.l=ind.l[i];cur.c=ind.c[i];}
+    const k=bars.length-1;map[i]=ind.t[i]+ind.tf>=(b+1)*H?k:k-1;}
+  const c=bars.map(x=>x.c),e12=emaArr(c,12),e26=emaArr(c,26),m=e12.map((v,j)=>v-e26[j]),sg=emaArr(m,9);
+  return {map,c,o:bars.map(x=>x.o),h:bars.map(x=>x.h),l:bars.map(x=>x.l),e20:emaArr(c,20),e50:emaArr(c,50),r:rsiArr(c,14),hist:m.map((v,j)=>v-sg[j]),atr:smaArr(bars.map(x=>x.h-x.l),14)};
+}
+
+/* ---------- candle pattern engine: [name, direction, base weight] ---------- */
+function patList(x,i){
+  if(i<6)return [];
+  const {c,o,h,l,atr}=x,R=h[i]-l[i]+1e-12,body=Math.abs(c[i]-o[i]),uw=h[i]-Math.max(o[i],c[i]),lw=Math.min(o[i],c[i])-l[i],a=(atr[i]||R)+1e-12;
+  const up=k=>c[i-k]>o[i-k],dn=k=>c[i-k]<o[i-k],bd=k=>Math.abs(c[i-k]-o[i-k]),out=[],P=(n,d,w)=>out.push([n,d,w]);
+  const prior=(c[i-1]-c[i-6])/a;                                   // move into this candle (trend context)
+  const engB=k=>dn(k+1)&&up(k)&&o[i-k]<=c[i-k-1]&&c[i-k]>=o[i-k-1],engS=k=>up(k+1)&&dn(k)&&o[i-k]>=c[i-k-1]&&c[i-k]<=o[i-k-1];
+  const harB=k=>dn(k+1)&&up(k)&&o[i-k]>=c[i-k-1]&&c[i-k]<o[i-k-1]&&bd(k)<0.6*bd(k+1),harS=k=>up(k+1)&&dn(k)&&o[i-k]<=c[i-k-1]&&c[i-k]>o[i-k-1]&&bd(k)<0.6*bd(k+1);
+  if(engB(0))P("Bullish engulfing",1,2);
+  if(engS(0))P("Bearish engulfing",-1,2);
+  if(lw/R>=0.6&&body/R<=0.3&&uw/R<=0.15){if(prior>0.5)P("Hanging man",-1,1.5);else P("Hammer / bullish pin bar",1,2);}
+  if(uw/R>=0.6&&body/R<=0.3&&lw/R<=0.15){if(prior<-0.5)P("Inverted hammer",1,1.5);else P("Shooting star / bearish pin bar",-1,2);}
+  if(body/R>=0.85&&up(0))P("Bullish marubozu",1,1);
+  if(body/R>=0.85&&dn(0))P("Bearish marubozu",-1,1);
+  if(dn(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&up(0)&&c[i]>(o[i-2]+c[i-2])/2)P("Morning star",1,3);
+  if(up(2)&&bd(2)>=0.6*a&&bd(1)<=0.3*bd(2)&&dn(0)&&c[i]<(o[i-2]+c[i-2])/2)P("Evening star",-1,3);
+  if(up(0)&&up(1)&&up(2)&&c[i]>c[i-1]&&c[i-1]>c[i-2]&&o[i]>o[i-1]&&o[i-1]>o[i-2])P("Three white soldiers",1,2);
+  if(dn(0)&&dn(1)&&dn(2)&&c[i]<c[i-1]&&c[i-1]<c[i-2]&&o[i]<o[i-1]&&o[i-1]<o[i-2])P("Three black crows",-1,2);
+  if(Math.abs(l[i]-l[i-1])<=0.1*a&&dn(1)&&up(0))P("Tweezer bottom",1,1.5);
+  if(Math.abs(h[i]-h[i-1])<=0.1*a&&up(1)&&dn(0))P("Tweezer top",-1,1.5);
+  if(harB(0))P("Bullish harami",1,1);
+  if(harS(0))P("Bearish harami",-1,1);
+  if(dn(1)&&up(0)&&bd(1)>=0.5*a&&o[i]<=c[i-1]&&c[i]>(o[i-1]+c[i-1])/2&&c[i]<o[i-1])P("Piercing line",1,2);
+  if(up(1)&&dn(0)&&bd(1)>=0.5*a&&o[i]>=c[i-1]&&c[i]<(o[i-1]+c[i-1])/2&&c[i]>o[i-1])P("Dark cloud cover",-1,2);
+  if(harB(1)&&up(0)&&c[i]>c[i-1]&&c[i]>o[i-2])P("Three inside up",1,2.5);
+  if(harS(1)&&dn(0)&&c[i]<c[i-1]&&c[i]<o[i-2])P("Three inside down",-1,2.5);
+  if(engB(1)&&up(0)&&c[i]>c[i-1])P("Three outside up",1,3);
+  if(engS(1)&&dn(0)&&c[i]<c[i-1])P("Three outside down",-1,3);
+  if(dn(1)&&up(0)&&bd(1)>=0.6*a&&body>=0.6*a&&o[i]>=o[i-1])P("Bullish kicker",1,3);
+  if(up(1)&&dn(0)&&bd(1)>=0.6*a&&body>=0.6*a&&o[i]<=o[i-1])P("Bearish kicker",-1,3);
+  if(h[i]>h[i-1]&&l[i]<l[i-1]&&prior<0&&up(0)&&c[i]>=h[i]-0.25*R)P("Bullish key reversal",1,2);
+  if(h[i]>h[i-1]&&l[i]<l[i-1]&&prior>0&&dn(0)&&c[i]<=l[i]+0.25*R)P("Bearish key reversal",-1,2);
+  const small=k=>bd(k)<=0.5*bd(4)&&h[i-k]<=h[i-4]&&l[i-k]>=l[i-4];
+  if(up(4)&&bd(4)>=0.7*a&&small(1)&&small(2)&&small(3)&&up(0)&&c[i]>c[i-4])P("Rising three methods",1,2.5);
+  if(dn(4)&&bd(4)>=0.7*a&&small(1)&&small(2)&&small(3)&&dn(0)&&c[i]<c[i-4])P("Falling three methods",-1,2.5);
+  if(body/R<=0.1){if(lw/R>=0.6&&uw/R<=0.1)P("Dragonfly doji",1,1.5);else if(uw/R>=0.6&&lw/R<=0.1)P("Gravestone doji",-1,1.5);else P("Doji (indecision)",0,0);}
+  if(h[i]<=h[i-1]&&l[i]>=l[i-1])P("Inside bar",0,0);
+  return out;
+}
+/* pattern strength = base weight x location: at support/resistance, at a Bollinger band, at an RSI extreme */
+function patStrength(x,i,pl){
+  let bull=0,bear=0;const ctx=x.ll50&&!isNaN(x.ll50[i])&&!isNaN(x.lo[i]);
+  for(const p of pl){if(!p[1])continue;let m=1;
+    if(ctx){if(p[1]===1){if(x.l[i]-x.ll50[i]<=0.7*x.atr[i])m+=0.5;if(x.l[i]<=x.lo[i]||x.l[i-1]<=x.lo[i-1])m+=0.5;if(x.r14[i]<40)m+=0.5;}
+      else{if(x.hh50[i]-x.h[i]<=0.7*x.atr[i])m+=0.5;if(x.h[i]>=x.hi[i]||x.h[i-1]>=x.hi[i-1])m+=0.5;if(x.r14[i]>60)m+=0.5;}}
+    if(p[1]===1)bull+=p[2]*m;else bear+=p[2]*m;}
+  return {bull,bear};
+}
+/* candle patterns on the last CLOSED 15-minute candle */
+function htfPats(x,i){const H=x.h15,j=H.map[i];return j>=20?patList(H,j):[];}
+const PCLUSTER=["Strong bullish candle setup (score 4+)","Strong bearish candle setup (score 4+)"];
+function clusterDir(st){return st.bull>=4&&st.bull>=st.bear+3?1:st.bear>=4&&st.bear>=st.bull+3?-1:0;}
+const bullPat=(x,i)=>patList(x,i).some(p=>p[1]===1),bearPat=(x,i)=>patList(x,i).some(p=>p[1]===-1);
+
+/* ---------- strategy library (classic professional setups) ---------- */
+const RULES=[
+ {id:"bbrsi",name:"BB + RSI + Aroon reversal",fn:(x,i)=>{const od=x.au[i]-x.ad[i],op=x.au[i-1]-x.ad[i-1];
+   if(x.c[i-1]<x.lo[i-1]&&x.c[i]>x.lo[i]&&x.r14[i]>x.r14[i-1]&&x.r14[i-1]<40&&od>op)return 1;
+   if(x.c[i-1]>x.hi[i-1]&&x.c[i]<x.hi[i]&&x.r14[i]<x.r14[i-1]&&x.r14[i-1]>60&&od<op)return -1;return 0;}},
+ {id:"rsix",name:"RSI extreme snap-back",fn:(x,i)=>{
+   if(x.r14[i]<32&&x.r14[i]>x.r14[i-1]&&x.c[i]>x.o[i])return 1;
+   if(x.r14[i]>68&&x.r14[i]<x.r14[i-1]&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"bbst",name:"Bollinger + Stochastic cross",fn:(x,i)=>{
+   if(x.l[i]<=x.lo[i]&&x.K[i]<25&&x.K[i]>x.D[i]&&x.K[i-1]<=x.D[i-1])return 1;
+   if(x.h[i]>=x.hi[i]&&x.K[i]>75&&x.K[i]<x.D[i]&&x.K[i-1]>=x.D[i-1])return -1;return 0;}},
+ {id:"pull",name:"Trend pullback (EMA + ADX + MACD)",fn:(x,i)=>{
+   if(x.e20[i]>x.e50[i]&&x.c[i]>x.e200[i]&&x.adx[i]>20&&x.pdi[i]>x.mdi[i]&&x.l[i]<=x.e20[i]+0.1*x.atr[i]&&x.c[i]>x.e20[i]&&x.c[i]>x.o[i]&&x.hist[i]>x.hist[i-1])return 1;
+   if(x.e20[i]<x.e50[i]&&x.c[i]<x.e200[i]&&x.adx[i]>20&&x.mdi[i]>x.pdi[i]&&x.h[i]>=x.e20[i]-0.1*x.atr[i]&&x.c[i]<x.e20[i]&&x.c[i]<x.o[i]&&x.hist[i]<x.hist[i-1])return -1;return 0;}},
+ {id:"macdst",name:"MACD cross + Stochastic trend",fn:(x,i)=>{
+   if(x.hist[i-1]<=0&&x.hist[i]>0&&x.c[i]>x.e50[i]&&x.K[i]>x.K[i-1])return 1;
+   if(x.hist[i-1]>=0&&x.hist[i]<0&&x.c[i]<x.e50[i]&&x.K[i]<x.K[i-1])return -1;return 0;}},
+ {id:"sr",name:"Candle pattern at support / resistance",fn:(x,i)=>{
+   if(bullPat(x,i)&&x.l[i]-x.ll50[i]<=0.5*x.atr[i])return 1;
+   if(bearPat(x,i)&&x.hh50[i]-x.h[i]<=0.5*x.atr[i])return -1;return 0;}},
+ {id:"adxb",name:"ADX breakout (trend follow)",fn:(x,i)=>{
+   if(x.adx[i]>25&&x.pdi[i]>x.mdi[i]&&x.c[i]>x.hh20[i]&&x.c[i]>x.o[i])return 1;
+   if(x.adx[i]>25&&x.mdi[i]>x.pdi[i]&&x.c[i]<x.ll20[i]&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"cci",name:"CCI +/-100 snap-back",fn:(x,i)=>{
+   if(x.cci[i-1]<-100&&x.cci[i]>=-100&&x.c[i]>x.o[i])return 1;
+   if(x.cci[i-1]>100&&x.cci[i]<=100&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"mtf",name:"15m + 1h trend with RSI pullback",fn:(x,i)=>{const a=x.h15,b=x.h60,j=a.map[i],k=b.map[i];if(j<1||k<1)return 0;
+   const up=a.e20[j]>a.e50[j]&&b.e20[k]>b.e50[k],dn=a.e20[j]<a.e50[j]&&b.e20[k]<b.e50[k];
+   if(up&&x.r14[i-1]<45&&x.r14[i]>=45&&x.c[i]>x.o[i])return 1;
+   if(dn&&x.r14[i-1]>55&&x.r14[i]<=55&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"div",name:"RSI divergence reversal",fn:(x,i)=>{
+   if((x.div[i]===1||x.div[i-1]===1)&&x.c[i]>x.o[i]&&x.c[i]<x.bbm[i])return 1;
+   if((x.div[i]===-1||x.div[i-1]===-1)&&x.c[i]<x.o[i]&&x.c[i]>x.bbm[i])return -1;return 0;}}
+];
+
+function featRow(ind,i){
+  if(i<210)return null;
+  const {c,o,h,l,rng,atr,atrPre}=ind;
+  const a=atr[i]+1e-12,avg=(atrPre[i+1]-atrPre[i-99])/100+1e-12,R=rng[i]+1e-12,mx=Math.max(o[i],c[i]),mn=Math.min(o[i],c[i]);
+  const d=new Date(ind.t[i]),hr=d.getUTCHours()+d.getUTCMinutes()/60,pl=patList(ind,i);
+  let cons=0;for(let j=i;j>i-5;j--){const dir=c[j]>o[j]?1:(c[j]<o[j]?-1:0);if(dir===0)break;if(cons===0||Math.sign(cons)===dir)cons+=dir;else break;}
+  const row=[(c[i]-c[i-1])/a,(c[i]-c[i-2])/a,(c[i]-c[i-3])/a,(c[i]-c[i-5])/a,(c[i]-c[i-10])/a,(c[i]-c[i-20])/a,
+    ind.r14[i]/100,ind.r7[i]/100,(c[i]-ind.e20[i])/a,(c[i]-ind.e50[i])/a,(ind.e20[i]-ind.e50[i])/a,
+    (c[i]-ind.lo[i])/(4*ind.bbs[i]+1e-12),a/avg,rng[i]/a,(c[i]-o[i])/R,(h[i]-mx)/R,(mn-l[i])/R,ind.raw[i]/100,
+    Math.sin(2*Math.PI*hr/24),Math.cos(2*Math.PI*hr/24),
+    ind.hist[i]/a,(ind.hist[i]-ind.hist[i-1])/a,ind.K[i]/100,ind.D[i]/100,ind.adx[i]/100,(ind.pdi[i]-ind.mdi[i])/100,
+    Math.max(-3,Math.min(3,ind.cci[i]/100)),(ind.au[i]-ind.ad[i])/100,(ind.hh50[i]-c[i])/a,(c[i]-ind.ll50[i])/a,
+    (c[i]-ind.e200[i])/a,(ind.e200[i]-ind.e200[i-10])/a,
+    pl.filter(p=>p[1]===1).length,pl.filter(p=>p[1]===-1).length,pl.some(p=>p[0].startsWith("Doji"))?1:0,pl.some(p=>p[0]==="Inside bar")?1:0,cons/5];
+  const A=ind.h15,Bh=ind.h60,j1=A.map[i],j2=Bh.map[i];if(j1<20||j2<20)return null;
+  const a1=A.atr[j1]+1e-12,a2=Bh.atr[j2]+1e-12;
+  row.push((A.e20[j1]-A.e50[j1])/a1,A.r[j1]/100,A.hist[j1]/a1,(Bh.e20[j2]-Bh.e50[j2])/a2,Bh.r[j2]/100,(c[i]-Bh.e20[j2])/a2,4*ind.bbs[i]/a,ind.div[i]);
+  const st=patStrength(ind,i,pl),hp=patList(A,j1);let hb=0,hs=0;for(const p of hp){if(p[1]===1)hb+=p[2];else if(p[1]===-1)hs+=p[2];}
+  row.push(Math.min(st.bull,12)/6,Math.min(st.bear,12)/6,Math.min(hb,6)/3,Math.min(hs,6)/3);
+  return row.every(Number.isFinite)?row:null;
+}
+function buildFeatures(cs,ind){ind=ind||buildInd(cs);const X=new Array(cs.length).fill(null);for(let i=210;i<cs.length;i++)X[i]=featRow(ind,i);return X;}
+/* fast live path: only the newest candle is analysed, on the last 2000 candles */
+function analyseLast(cs,model,val,strict,tf,force){
+  const w=cs.length>2000?cs.slice(-2000):cs,ind=buildInd(w),i=w.length-1,X=[];X[i]=featRow(ind,i);
+  return decide(ind,X,i,model,val,strict,tf,force);
+}
+function labelsArr(cs,k){const n=cs.length,y=new Array(n).fill(-2);
+  for(let i=0;i+k<n;i++){const a=cs[i].c,b=cs[i+k].c;y[i]=b>a?1:(b<a?0:-1);}return y;}
+
+function sessionOk(t){const d=new Date(t),day=d.getUTCDay(),h=d.getUTCHours();return day>=1&&day<=5&&h>=7&&h<16;}
+function filterReason(ind,X,i,strict,tf){
+  if(!strict)return null;
+  if(!sessionOk(ind.t[i]+tf))return "OFF-HOURS";
+  if(ind.rng[i]>2*ind.atr[i])return "VOLATILE";
+  return null;}
+function wilsonLow(w,n,z){if(!n)return 0;const p=w/n,d=1+z*z/n,c=p+z*z/(2*n),m=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return (c-m)/d;}
+
+/* ---------- AI: gradient-boosted decision trees (depth 2, captures indicator interactions) ---------- */
+function trainTrees(X,y,idx,R=100,lr=0.1,lam=5,minLeaf=50,nb=16){
+  const F=X[idx[0]].length,m=idx.length,edges=[],B=[];
+  for(let f=0;f<F;f++){
+    const vals=new Float64Array(m);for(let j=0;j<m;j++)vals[j]=X[idx[j]][f];
+    const sorted=Array.from(vals).sort((a,b)=>a-b),e=[];
+    for(let q=1;q<nb;q++){const v=sorted[Math.floor(q*m/nb)];if(!e.length||v>e[e.length-1])e.push(v);}
+    edges.push(e);const b=new Uint8Array(m);
+    for(let j=0;j<m;j++){const v=vals[j];let k=0;while(k<e.length&&v>=e[k])k++;b[j]=k;}
+    B.push(b);
+  }
+  const yy=idx.map(i=>y[i]),mean=yy.reduce((a,b)=>a+b,0)/m,base=Math.log(mean/(1-mean)),Fv=new Float64Array(m).fill(base),trees=[];
+  const all=new Int32Array(m);for(let j=0;j<m;j++)all[j]=j;
+  let g=new Float64Array(m),h=new Float64Array(m);
+  function best(rows){
+    let G=0,H=0;for(let q=0;q<rows.length;q++){G+=g[rows[q]];H+=h[rows[q]];}
+    let bs=null;
+    for(let f=0;f<F;f++){
+      const ne=edges[f].length;if(!ne)continue;
+      const Gh=new Float64Array(ne+1),Hh=new Float64Array(ne+1),Ch=new Int32Array(ne+1),Bf=B[f];
+      for(let q=0;q<rows.length;q++){const j=rows[q],b=Bf[j];Gh[b]+=g[j];Hh[b]+=h[j];Ch[b]++;}
+      let gl=0,hl=0,cl=0;
+      for(let b=0;b<ne;b++){gl+=Gh[b];hl+=Hh[b];cl+=Ch[b];const cr=rows.length-cl;if(cl<minLeaf||cr<minLeaf)continue;
+        const gr=G-gl,hr=H-hl,gain=gl*gl/(hl+lam)+gr*gr/(hr+lam)-G*G/(H+lam);
+        if(!bs||gain>bs.gain)bs={gain,f,b,thr:edges[f][b],gl,hl,gr,hr};}
+    }
+    return {bs,G,H};
+  }
+  const split=(rows,f,b)=>{const L=[],Rr=[];for(let q=0;q<rows.length;q++){const j=rows[q];(B[f][j]<=b?L:Rr).push(j);}return [L,Rr];};
+  for(let r=0;r<R;r++){
+    for(let j=0;j<m;j++){const p=1/(1+Math.exp(-Fv[j]));g[j]=yy[j]-p;h[j]=p*(1-p);}
+    const root=best(all);if(!root.bs||root.bs.gain<=1e-9)break;
+    const rb=root.bs,[L,Rr]=split(all,rb.f,rb.b),kids=[];
+    for(const rows of [L,Rr]){
+      const s=best(rows);
+      if(s.bs&&s.bs.gain>1e-9)kids.push({f:s.bs.f,b:s.bs.b,thr:s.bs.thr,l:lr*s.bs.gl/(s.bs.hl+lam),r:lr*s.bs.gr/(s.bs.hr+lam)});
+      else kids.push(lr*s.G/(s.H+lam));
+    }
+    trees.push({f:rb.f,thr:rb.thr,l:kids[0],r:kids[1]});
+    const Bf=B[rb.f];
+    for(let j=0;j<m;j++){let nd=Bf[j]<=rb.b?kids[0]:kids[1];if(typeof nd==="object")nd=B[nd.f][j]<=nd.b?nd.l:nd.r;Fv[j]+=nd;}
+  }
+  return {base,trees};
+}
+function predictG(model,x){let F=model.base;
+  for(const t of model.trees){let nd=x[t.f]<t.thr?t.l:t.r;if(typeof nd==="object")nd=x[nd.f]<nd.thr?nd.l:nd.r;F+=nd;}
+  return 1/(1+Math.exp(-F));}
+/* ---------- AI #2: regularised logistic regression (smooth linear view of all indicators) ---------- */
+function trainLR(X,y,idx,it=300,lr=0.3,l2=2e-3){
+  const F=X[idx[0]].length,m=idx.length,mu=new Float64Array(F),sd=new Float64Array(F),Z=new Float64Array(m*F),yy=new Float64Array(m);
+  for(let j=0;j<m;j++){const r=X[idx[j]];yy[j]=y[idx[j]];for(let f=0;f<F;f++)mu[f]+=r[f]/m;}
+  for(let j=0;j<m;j++){const r=X[idx[j]];for(let f=0;f<F;f++)sd[f]+=(r[f]-mu[f])**2/m;}
+  for(let f=0;f<F;f++)sd[f]=Math.sqrt(sd[f])+1e-9;
+  for(let j=0;j<m;j++){const r=X[idx[j]];for(let f=0;f<F;f++)Z[j*F+f]=Math.max(-5,Math.min(5,(r[f]-mu[f])/sd[f]));}
+  const w=new Float64Array(F),gw=new Float64Array(F),mean=yy.reduce((a,b)=>a+b,0)/m;let b=Math.log(mean/(1-mean));
+  for(let t=0;t<it;t++){gw.fill(0);let gb=0;
+    for(let j=0;j<m;j++){let s=b;const o=j*F;for(let f=0;f<F;f++)s+=w[f]*Z[o+f];const e=1/(1+Math.exp(-s))-yy[j];gb+=e;for(let f=0;f<F;f++)gw[f]+=e*Z[o+f];}
+    for(let f=0;f<F;f++)w[f]-=lr*(gw[f]/m+l2*w[f]);b-=lr*gb/m;}
+  return {mu,sd,w,b};
+}
+function predictL(m,x){let s=m.b;for(let f=0;f<x.length;f++)s+=m.w[f]*Math.max(-5,Math.min(5,(x[f]-m.mu[f])/m.sd[f]));return 1/(1+Math.exp(-s));}
+function trainModel(X,y,idx){return {gb:trainTrees(X,y,idx,150),lr:trainLR(X,y,idx)};}
+/* ensemble vote: both AIs must point the same way and their average must clear the threshold */
+function aiVote(g,l,thr){const p=(g+l)/2;if(p>=thr&&g>0.5&&l>0.5)return 1;if(p<=1-thr&&g<0.5&&l<0.5)return -1;return 0;}
+function predictP(model,x){return (predictG(model.gb,x)+predictL(model.lr,x))/2;}
+
+/* ---------- walk-forward validation ---------- */
+function validateAndTrain(cs,k,payout,strict,tf){
+  const be=1/(1+payout),ind=buildInd(cs),X=buildFeatures(cs,ind),y=labelsArr(cs,k),rows=[];
+  for(let i=0;i<cs.length;i++)if(X[i]&&y[i]>=0)rows.push(i);
+  if(rows.length<1200)return {model:null,val:{edge:false,be,rules:[],note:"Not enough history ("+rows.length+" candles)"}};
+  const days=r=>Math.max(1,(ind.t[r[r.length-1]]-ind.t[r[0]])/86400000*5/7);
+  const half=Math.floor(rows.length/2),rules=[];
+  for(const R of RULES){
+    let n=0,w=0,nA=0,wA=0,nB=0,wB=0;
+    rows.forEach((i,j)=>{
+      if(filterReason(ind,X,i,strict,tf))return;
+      const d=R.fn(ind,i);if(!d)return;const win=(d===1&&y[i]===1)||(d===-1&&y[i]===0)?1:0;
+      n++;w+=win;if(j<half){nA++;wA+=win;}else{nB++;wB+=win;}
+    });
+    const wr=n?w/n:0,low=wilsonLow(w,n,1.96),wrA=nA?wA/nA:0,wrB=nB?wB/nB:0;
+    rules.push({id:R.id,name:R.name,n,wr,low,wrA,wrB,nA,nB,pass:n>=80&&low>be&&nA>=30&&nB>=30&&wrA>be&&wrB>be});
+  }
+  /* how each candle pattern actually performed on THIS pair at THIS expiry */
+  const PS={},addP=(name,dir,win,older)=>{const q=PS[name]||(PS[name]={name,dir,n:0,w:0,nA:0,wA:0,nB:0,wB:0});q.n++;q.w+=win;if(older){q.nA++;q.wA+=win;}else{q.nB++;q.wB+=win;}};
+  rows.forEach((i,j)=>{
+    if(filterReason(ind,X,i,strict,tf))return;const pl=patList(ind,i),older=j<half;
+    for(const p of pl){if(!p[1])continue;addP(p[0],p[1],(p[1]===1&&y[i]===1)||(p[1]===-1&&y[i]===0)?1:0,older);}
+    const cd=clusterDir(patStrength(ind,i,pl));if(cd)addP(PCLUSTER[cd===1?0:1],cd,(cd===1&&y[i]===1)||(cd===-1&&y[i]===0)?1:0,older);
+  });
+  const pats=Object.values(PS).map(q=>{const wr=q.w/q.n,low=wilsonLow(q.w,q.n,1.64),wrA=q.nA?q.wA/q.nA:0,wrB=q.nB?q.wB/q.nB:0;
+    return Object.assign(q,{wr,low,wrA,wrB,pass:q.n>=50&&low>be&&q.nA>=15&&q.nB>=15&&wrA>be&&wrB>be});}).sort((p,q)=>q.n-p.n);
+  const cut=Math.floor(rows.length*0.7),trainIdx=rows.slice(0,cut),lastTrain=trainIdx[trainIdx.length-1];
+  const testIdx=rows.slice(cut).filter(i=>i>lastTrain+k);
+  const mv=trainModel(X,y,trainIdx),ps=testIdx.map(i=>[predictG(mv.gb,X[i]),predictL(mv.lr,X[i])]);
+  let best=null,bestRaw=null;
+  for(const thr of THR){
+    let n=0,w=0;
+    testIdx.forEach((i,j)=>{if(filterReason(ind,X,i,strict,tf))return;const v=aiVote(ps[j][0],ps[j][1],thr);
+      if(v===1){n++;if(y[i]===1)w++;}else if(v===-1){n++;if(y[i]===0)w++;}});
+    if(n>=100){const wr=w/n,low=wilsonLow(w,n,2.33);
+      if(!bestRaw||wr>bestRaw.wr)bestRaw={wr,n,thr};
+      if(low>be&&(!best||low>best.low))best={thr,n,wr,low};}
+  }
+  const model=trainModel(X,y,rows),val={edge:!!best,be,testN:testIdx.length,rules,pats,anyRule:rules.some(r=>r.pass)||pats.some(q=>q.pass),bestRaw};
+  if(best)Object.assign(val,{thr:best.thr,wr:best.wr,low:best.low,n:best.n,perDay:best.n/days(testIdx)});
+  else val.note="no AI setting beat break-even with confidence";
+  return {model,val};
+}
+
+/* ---------- live analysis of the last closed candle ---------- */
+function readout(x,i){
+  const items=[],add=(k,txt,dir)=>items.push({k,txt,dir});
+  const up=x.e20[i]>x.e50[i]&&x.c[i]>x.e200[i],dn=x.e20[i]<x.e50[i]&&x.c[i]<x.e200[i];
+  add("Trend",up?"Up":dn?"Down":"Mixed",up?1:dn?-1:0);
+  const r=x.r14[i];add("RSI",r.toFixed(0),r<30?1:r>70?-1:0);
+  const K=x.K[i],D=x.D[i];add("Stoch",K.toFixed(0),K<20&&K>D?1:K>80&&K<D?-1:0);
+  const mh=x.hist[i],mp=x.hist[i-1];add("MACD",mh>mp?"rising":"falling",mh>0&&mh>mp?1:mh<0&&mh<mp?-1:0);
+  const ad=x.adx[i];add("ADX",ad.toFixed(0),ad>20?(x.pdi[i]>x.mdi[i]?1:-1):0);
+  const cc=x.cci[i];add("CCI",cc.toFixed(0),cc<-100?1:cc>100?-1:0);
+  const pb=(x.c[i]-x.lo[i])/(x.hi[i]-x.lo[i]+1e-12);add("Bollinger",(pb*100).toFixed(0)+"%",pb<0.1?1:pb>0.9?-1:0);
+  const ao=x.au[i]-x.ad[i];add("Aroon",ao.toFixed(0),ao>50?1:ao<-50?-1:0);
+  for(const [nm,H] of [["15m",x.h15],["1h",x.h60]]){const j=H.map[i];if(j<1)continue;const u=H.e20[j]>H.e50[j]&&H.c[j]>H.e20[j],d=H.e20[j]<H.e50[j]&&H.c[j]<H.e20[j];
+    add(nm+" trend",u?"Up":d?"Down":"Mixed",u?1:d?-1:0);}
+  if(x.div[i])add("RSI divergence",x.div[i]>0?"bullish":"bearish",x.div[i]);
+  const pats=patList(x,i),str=patStrength(x,i,pats),hp=htfPats(x,i);
+  if(str.bull||str.bear)add("Candle strength",str.bull>=str.bear?"bull "+str.bull.toFixed(1):"bear "+str.bear.toFixed(1),str.bull>=str.bear+2?1:str.bear>=str.bull+2?-1:0);
+  let bull=0,bear=0;items.forEach(q=>{if(q.dir===1)bull++;else if(q.dir===-1)bear++;});
+  pats.forEach(p=>{if(p[1]===1)bull++;else if(p[1]===-1)bear++;});
+  return {items,pats,str,hp,bull,bear};
+}
+/* every view of the market as a vote from -1 (PUT) to +1 (CALL), with a weight */
+function mixParts(x,i,out){
+  const cl=v=>Math.max(-1,Math.min(1,v)),ro=out.ro,sk=["Candle strength","15m trend","1h trend"];
+  let ib=0,is=0;ro.items.forEach(q=>{if(sk.includes(q.k))return;if(q.dir>0)ib++;else if(q.dir<0)is++;});
+  let hb=0,hs=0;ro.hp.forEach(p=>{if(p[1]===1)hb+=p[2];else if(p[1]===-1)hs+=p[2];});
+  const tr=ro.items.filter(q=>q.k==="15m trend"||q.k==="1h trend").reduce((a,q)=>a+q.dir,0)/2;
+  return [
+    {k:"AI models",v:cl((out.p-0.5)/0.08),w:3},
+    {k:"Indicators",v:cl((ib-is)/Math.max(3,ib+is)),w:2},
+    {k:"Candle patterns",v:cl((ro.str.bull-ro.str.bear)/4+(hb-hs)/8),w:2},
+    {k:"15m + 1h trend",v:tr,w:1.5},
+    {k:"Price movement",v:cl((x.c[i]-x.c[i-3])/(1.5*x.atr[i]+1e-12)),w:1}];
+}
+function decide(ind,X,i,model,val,strict,tf,force){
+  const out={p:null,side:null,tier:null,srcs:[],off:null,lean:null,ro:null};
+  const x=X[i];if(!x||!model)return out;
+  out.pg=predictG(model.gb,x);out.pl=predictL(model.lr,x);out.p=(out.pg+out.pl)/2;out.off=filterReason(ind,X,i,strict,tf);out.ro=readout(ind,i);
+  out.lean={side:out.p>=0.5?"CALL":"PUT",conf:Math.max(out.p,1-out.p)};
+  out.mix=mixParts(ind,i,out);out.stats=[];
+  const dirs=[],thr=val.edge?val.thr:0.58;let aiDir=0,ruleDir=0;
+  if(val.edge||force){const v=aiVote(out.pg,out.pl,thr);if(v){dirs.push(v);aiDir=v;out.srcs.push("AI ensemble");if(val.edge)out.stats.push({src:"AI ensemble",wr:val.wr,n:val.n});}}
+  for(const r of val.rules){if(!r.pass)continue;const d=RULES.find(q=>q.id===r.id).fn(ind,i);if(d){dirs.push(d);ruleDir=d;out.srcs.push(r.name);out.stats.push({src:r.name,wr:r.wr,n:r.n});}}
+  const here=out.ro.pats.map(p=>p[0]),cd=clusterDir(out.ro.str);if(cd)here.push(PCLUSTER[cd===1?0:1]);
+  for(const q of (val.pats||[])){if(q.pass&&here.includes(q.name)){dirs.push(q.dir);ruleDir=q.dir;out.srcs.push(q.name+" ("+(q.wr*100).toFixed(0)+"% past)");out.stats.push({src:q.name,wr:q.wr,n:q.n});}}
+  if(!dirs.length||out.off)return out;
+  if(dirs.some(d=>d!==dirs[0])){out.conflict=true;out.srcs=[];return out;}
+  out.side=dirs[0]===1?"CALL":"PUT";out.tier=aiDir&&ruleDir?"A+":(aiDir?"A":"B");
+  return out;
+}
+
+</script>
+<script>
+/* ===== APP ===== */
+const $=id=>document.getElementById(id);
+/* escape any text that did not come from this app's own code before it goes into the page */
+const esc=v=>String(v).replace(/[&<>"'`]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","`":"&#96;"})[c]);
+const KEY_RE=/^[A-Za-z0-9_-]{8,64}$/;
+const ALL=["EUR/USD-OTC","GBP/USD-OTC","USD/JPY-OTC","EUR/JPY-OTC"];
+const TFMIN={2:1,3:1,5:1},KC={2:2,3:3,5:5},WIN={2:20,3:25,5:30}; // OTC: 1-minute candles, candles ahead = expiry, entry window (sec)
+const CAP=1e9,FOCUS=99;   // local server: no credit limits
+let S={key:"",exp:5,pairs:ALL.slice(),strict:false,payout:85,auto:true};
+S.remember=true;
+try{const st=JSON.parse(localStorage.getItem("otc_set")||"{}");if(st&&typeof st==="object")for(const k of ["key","exp","pairs","strict","payout","auto","remember"])if(k in st)S[k]=st[k];}catch(e){}
+if(typeof S.key!=="string"||!KEY_RE.test(S.key))S.key="";if(!Array.isArray(S.pairs))S.pairs=[];
+S.exp=+S.exp;S.payout=[80,85,90].includes(+S.payout)?+S.payout:85;S.strict=S.strict===true;S.auto=S.auto!==false;
+if(!TFMIN[S.exp])S.exp=5;S.pairs=S.pairs.filter(p=>ALL.includes(p));if(!S.pairs.length)S.pairs=ALL.slice();
+const save=()=>{try{localStorage.setItem("otc_set",JSON.stringify(Object.assign({},S,{key:""})));}catch(e){}};
+let LOG=[];try{LOG=JSON.parse(localStorage.getItem("otc_log")||"[]");}catch(e){}
+if(!Array.isArray(LOG))LOG=[];
+LOG=LOG.filter(x=>x&&ALL.includes(x.pair)&&(x.side==="CALL"||x.side==="PUT")&&Number.isFinite(x.closeT)&&Number.isFinite(x.expiryAt)&&(x.res===null||x.res==="W"||x.res==="L"));
+const saveLog=()=>{try{localStorage.setItem("otc_log",JSON.stringify(LOG.slice(-150)));}catch(e){}};
+const hist={},models={},state={},logged={};
+let busy=false,timer=null,pend=null,ticker=null,audioCtx=null,wake=null;
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fmtS=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});
+const fmtM=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",hour:"2-digit",minute:"2-digit",hour12:false});
+const uS=t=>fmtS.format(t),uM=t=>fmtM.format(t),mmss=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+const tfm=()=>TFMIN[S.exp],TF=()=>tfm()*60000,pct=x=>(x*100).toFixed(1)+"%";
+
+/* ---- credits + rate limit (free Twelve Data: 8/min, 800/day) ---- */
+const dayKey=()=>"otc_used_"+new Date().toISOString().slice(0,10);
+const used=()=>{try{return +(localStorage.getItem(dayKey())||0);}catch(e){return 0;}};
+const addCredit=()=>{try{localStorage.setItem(dayKey(),used()+1);}catch(e){}};
+const reqTimes=[];
+async function throttle(){return;while(true){const now=Date.now();while(reqTimes.length&&now-reqTimes[0]>62000)reqTimes.shift();
+  if(reqTimes.length<6)break;await sleep(reqTimes[0]+62000-now+200);}reqTimes.push(Date.now());}
+function marketClosed(){return false;}   // OTC trades 24/7
+
+async function fetchSeries(pair,size){
+  await throttle();addCredit();
+  const u=`api/candles?symbol=${encodeURIComponent(pair.replace("/",""))}&interval=${tfm()}min&outputsize=${size}`;
+  let r;try{r=await fetch(u,{cache:"no-store"});}catch(e){throw new Error("Termux server not reachable: open Termux and run the server");}
+  let j;try{j=await r.json();}catch(e){throw new Error("Bad response from data service ("+r.status+")");}
+  if(!j||typeof j!=="object")throw new Error("Bad response from data service");
+  if(j.status==="error"){const m=String(j.message||"");if(/current minute/i.test(m))throw new Error("RATE");
+    throw new Error(m.slice(0,120)||"API error");}
+  if(!Array.isArray(j.values))throw new Error("No candle data returned");
+  const out=[];for(const v of j.values){if(!v||typeof v.datetime!=="string")continue;
+    const c={t:Date.parse(v.datetime.replace(" ","T")+"Z"),o:+v.open,h:+v.high,l:+v.low,c:+v.close};
+    if([c.t,c.o,c.h,c.l,c.c].every(Number.isFinite)&&c.h>=c.l&&c.o>0)out.push(c);}
+  return out.reverse();
+}
+const mergeC=(a,b)=>{const m=new Map(a.map(x=>[x.t,x]));b.forEach(x=>m.set(x.t,x));return [...m.values()].sort((p,q)=>p.t-q.t).slice(-6000);};
+function closedOf(arr,tf){const now=Date.now();let n=arr.length;while(n>0&&arr[n-1].t+tf>now)n--;return arr.slice(0,n);}
+
+/* ---- AI training runs in a background thread so the screen never freezes ---- */
+let worker=null,wid=0;const wpend={};
+function getWorker(){
+  if(worker!==null)return worker;
+  try{
+    const src=$("core").textContent+"\nonmessage=function(e){var d=e.data;postMessage({id:d.id,r:validateAndTrain(d.cs,d.k,d.payout,d.strict,d.tf)});};";
+    worker=new Worker(URL.createObjectURL(new Blob([src],{type:"text/javascript"})));
+    worker.onmessage=e=>{const p=wpend[e.data.id];if(p){delete wpend[e.data.id];p.res(e.data.r);}};
+    worker.onerror=()=>{worker=false;for(const id in wpend){const p=wpend[id];delete wpend[id];p.res(validateAndTrain(...p.args));}};
+  }catch(e){worker=false;}
+  return worker;
+}
+function trainAsync(cs,k,payout,strict,tf){
+  return new Promise(res=>{
+    const w=getWorker(),args=[cs,k,payout,strict,tf];
+    if(!w){setTimeout(()=>res(validateAndTrain(...args)),30);return;}
+    const id=++wid;wpend[id]={res,args};w.postMessage({id,cs,k,payout,strict,tf});
+  });
+}
+
+async function processPair(pair){
+  const tf=TF(),k=KC[S.exp],hk=pair+"|"+tfm(),expected=Math.floor(Date.now()/tf)*tf-tf;
+  const mk=["v5",hk,k,S.strict?1:0,S.payout].join("|"),st=state[pair];
+  if(st&&st.mk===mk&&!st.err&&st.t>=expected){st.at=Date.now();return;}                 // already analysed this candle: free
+  let cs=null;
+  if(hist[hk]){const c0=closedOf(hist[hk],tf);if(c0.length&&c0[c0.length-1].t>=expected)cs=c0;} // 1m history shared by 2, 3 and 5 min
+  if(!cs){
+    for(let attempt=0;attempt<2;attempt++){
+      if(used()>=CAP)throw new Error("CAP");
+      state[pair]=Object.assign({},st,{busy:hist[hk]?"Fetching newest candle...":"Downloading history..."});render();
+      try{
+        if(!hist[hk])hist[hk]=await fetchSeries(pair,5000);
+        else{const nw=await fetchSeries(pair,60),last=hist[hk][hist[hk].length-1].t;
+          hist[hk]=(nw.length&&last<nw[0].t-tf*1.5)?await fetchSeries(pair,5000):mergeC(hist[hk],nw);}
+        cs=closedOf(hist[hk],tf);
+        if(!cs.length||cs[cs.length-1].t>=expected||marketClosed())break;
+        await sleep(6000);                                              // newest candle not published yet: one retry
+      }catch(e){if(e.message==="RATE"&&attempt<2){$("status").textContent="Per-minute limit, waiting...";await sleep(62000);continue;}throw e;}
+    }
+  }
+  if(!cs||cs.length<300)throw new Error("Not enough candle data");
+  let m=models[mk];
+  if(!m||Date.now()-m.at>3*3600e3){
+    state[pair]=Object.assign({},state[pair],{busy:"Training AI model (background)..."});render();
+    const r=await trainAsync(cs,k,S.payout/100,S.strict,tf);m=models[mk]={model:r.model,val:r.val,at:Date.now()};
+  }
+  const last=cs[cs.length-1],val=m.val;
+  if(!m.model){state[pair]={mk,t:last.t,price:last.c,val,err:val.note};return;}
+  const d=analyseLast(cs,m.model,val,S.strict,tf,false);
+  const stale=Date.now()-last.t>Math.max(20*60000,4*tf),fresh=last.t>=expected,closeT=last.t+tf;
+  state[pair]={mk,t:last.t,price:last.c,val,d,stale,fresh,closeT,at:Date.now()};
+  if(d.side&&fresh&&!stale&&!logged[pair+closeT]&&Date.now()<=closeT+WIN[S.exp]*1000){
+    logged[pair+closeT]=1;addLog(pair,d.side,d.tier,d.srcs,d.p,closeT,true);beep();
+  }
+}
+function addLog(pair,side,tier,srcs,p,closeT,validated){
+  const conf=p===null?null:Math.round((side==="CALL"?p:1-p)*100);
+  if(LOG.some(x=>x.id===closeT+pair+S.exp))return;
+  LOG.push({id:closeT+pair+S.exp,pair,side,tier,srcs,conf,validated,exp:S.exp,closeT,expiryAt:closeT+S.exp*60000,res:null});saveLog();
+}
+function beep(){
+  try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    [900,1200,1500].forEach((f,q)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);
+      g.gain.value=0.3;o.start(audioCtx.currentTime+q*0.22);o.stop(audioCtx.currentTime+q*0.22+0.18);});}catch(e){}
+  try{navigator.vibrate&&navigator.vibrate([300,150,300,150,500]);}catch(e){}
+}
+
+async function runAll(){
+  if(busy)return;
+  if(marketClosed()){$("status").textContent="Forex market is closed (weekend). No credits used.";return;}
+  busy=true;$("refresh").disabled=true;const snap=S.exp;let capped=false;
+  /* free plan ~6 requests/minute: with more than 6 pairs, refresh the top 5 every candle plus 1 rotating pair,
+     so the best pairs are always on time. First load (pairs never analysed) still covers every pair once. */
+  const all=ranked().map(x=>x.p),fresh=all.some(p=>!state[p]);let order=all;
+  const cand=Math.floor(Date.now()/TF());
+  if(!fresh&&all.length>FOCUS){const rest=all.slice(FOCUS-1);order=all.slice(0,FOCUS-1).concat(rest[cand%rest.length]);
+    all.forEach(p=>{if(!order.includes(p)&&state[p])state[p].skip=cand;});}
+  let done=0;
+  for(const p of order){if(state[p])state[p].skip=null;
+    if(snap!==S.exp)break;
+    $("refresh").textContent=`Analysing ${++done}/${order.length}...`;
+    try{await processPair(p);}
+    catch(e){if(e.message==="CAP"){capped=true;break;}
+      state[p]={err:e.message==="RATE"?"Per-minute limit. Close other copies of the app, then Refresh.":String(e.message).slice(0,100)};}
+    render();
+  }
+  $("status").textContent=`Updated ${uS(Date.now())} UAE | data: IQ Option OTC (demo) via Termux`;
+  busy=false;$("refresh").disabled=false;$("refresh").textContent="Analyse now";render();
+}
+function schedule(){clearTimeout(timer);if(!S.auto)return;const tf=TF(),now=Date.now(),next=Math.ceil(now/tf)*tf+3000;   // local IQ Option feed: closed candle is ready within seconds
+  timer=setTimeout(async()=>{await runAll();schedule();},next-now);}
+function refreshNow(){clearTimeout(timer);clearTimeout(pend);
+  pend=setTimeout(async function go(){if(busy){pend=setTimeout(go,1500);return;}await runAll();schedule();},300);}
+
+/* ---- best expiry finder: trains 2/3/5 min on the same 1m history ---- */
+let bestBusy=false,bestRes=null;
+function bestOf(v){                       // strongest proven source: AI ensemble, a strategy, or a candle pattern
+  const c=[];if(v.edge)c.push({src:"AI ensemble",low:v.low,wr:v.wr,n:v.n,perDay:v.perDay});
+  (v.rules||[]).filter(r=>r.pass).forEach(r=>c.push({src:r.name,low:r.low,wr:r.wr,n:r.n}));
+  (v.pats||[]).filter(q=>q.pass).forEach(q=>c.push({src:q.name,low:q.low,wr:q.wr,n:q.n}));
+  c.sort((a,b)=>b.low-a.low);return c[0]||null;}
+async function findBest(){
+  if(bestBusy)return;bestBusy=true;$("bestBtn").disabled=true;
+  const tf=TF(),res={pairs:{},be:1/(1+S.payout/100),at:Date.now(),payout:S.payout,strict:S.strict},EX=[2,3,5],out=$("best");
+  try{
+    for(const pair of S.pairs){
+      const hk=pair+"|"+tfm();res.pairs[pair]={};
+      if(!hist[hk]){
+        if(marketClosed()){res.pairs[pair].err="market closed, no data";continue;}
+        if(used()>=CAP){res.pairs[pair].err="daily credit cap reached";continue;}
+        out.innerHTML=`<div class="card"><small>${pair}: downloading history...</small></div>`;
+        try{hist[hk]=await fetchSeries(pair,5000);}catch(e){res.pairs[pair].err=String(e.message).slice(0,80);continue;}
+      }
+      const cs=closedOf(hist[hk],tf);if(cs.length<1500){res.pairs[pair].err="not enough history";continue;}
+      for(const e of EX){
+        out.innerHTML=`<div class="card"><small>Testing ${pair} at ${e} min... (${Object.keys(res.pairs).length}/${S.pairs.length} pairs)</small></div>`;
+        const k=KC[e],mk=["v5",hk,k,S.strict?1:0,S.payout].join("|");let m=models[mk];
+        if(!m||Date.now()-m.at>3*3600e3){const r=await trainAsync(cs,k,S.payout/100,S.strict,tf);m=models[mk]={model:r.model,val:r.val,at:Date.now()};}
+        res.pairs[pair][e]={b:bestOf(m.val),val:m.val};
+      }
+    }
+    const score={2:0,3:0,5:0},wins={2:[],3:[],5:[]};
+    for(const pair in res.pairs){const r=res.pairs[pair];if(r.err)continue;let be=null;
+      for(const e of EX){const b=r[e].b;if(b&&(!be||b.low>r[be].b.low))be=e;}
+      r.best=be;if(be){wins[be].push(pair);}
+      for(const e of EX)if(r[e].b)score[e]+=r[e].b.low-res.be;}
+    const top=EX.filter(e=>score[e]>0).sort((a,b)=>score[b]-score[a]||wins[b].length-wins[a].length)[0]||null;
+    Object.assign(res,{top,wins});bestRes=res;
+  }finally{bestBusy=false;$("bestBtn").disabled=false;renderBest();}
+}
+function renderBest(){
+  const out=$("best"),r=bestRes;if(!r){out.innerHTML="";return;}
+  const EX=[2,3,5],cell=(x,e)=>{if(x.err)return "";const b=x[e].b;
+    return `<td class="${x.best===e?"win":""}">${b?`<span class="g">${pct(b.low)}</span><br><span style="font-size:10px;color:var(--mut)">${pct(b.wr)} / ${b.n}</span>`:"<span style='color:var(--mut)'>not proven</span>"}</td>`;};
+  const rows=Object.entries(r.pairs).map(([p,x])=>x.err?`<tr><td>${p}</td><td colspan="4" style="color:#e9a36a">${esc(x.err)}</td></tr>`
+    :`<tr><td>${p}</td>${EX.map(e=>cell(x,e)).join("")}<td><b>${x.best?x.best+" min":"skip"}</b><br><span style="font-size:10px;color:var(--mut)">${x.best?x[x.best].b.src:""}</span></td></tr>`).join("");
+  const head=r.top?`<div class="big" style="font-size:20px;font-weight:800">Recommended: ${r.top} min</div><small class="ok">Best for ${r.wins[r.top].length?r.wins[r.top].join(", "):"the most pairs overall"}. Numbers are the worst-case win rate on unseen history (break-even ${pct(r.be)}).</small>
+      ${S.exp!==r.top?`<button id="useBest">Switch to ${r.top} min</button>`:`<small class="ok">You are already on ${r.top} min.</small>`}`
+    :`<div style="font-size:18px;font-weight:800;color:#e9a36a">No expiry is proven right now</div><small class="bad">No AI, strategy or candle pattern beat break-even (${pct(r.be)}) with confidence on any pair. Wait for a better session, or practise on demo only.</small>`;
+  out.innerHTML=`<div class="card">${head}<table class="bt"><tr><th>Pair</th><th>2 min</th><th>3 min</th><th>5 min</th><th>Best</th></tr>${rows}</table>
+    <small>Tested ${uM(r.at)} UAE at payout ${r.payout}%${r.strict?", strict filter on":""}. Big = worst-case %, small = past win rate / trades. Markets change: re-run every few hours.</small></div>`;
+  const u=$("useBest");if(u)u.onclick=()=>{S.exp=r.top;save();resetAll();setChart();render();renderBest();refreshNow();};
+}
+
+/* ---- one verdict per pair from EVERYTHING: AI, indicators, candle patterns, 15m/1h trend, movement, proven history ---- */
+function verdict(p){
+  const s=state[p],now=Date.now();
+  if(!s)return {p,kind:"init",rank:-1};
+  if(s.err)return {p,s,kind:"err",rank:-2};
+  if(!s.d||!s.d.mix)return {p,s,kind:"busy",rank:-1};
+  const d=s.d,v=s.val,parts=d.mix.slice(),open=s.fresh&&!s.stale&&now<=s.closeT+WIN[S.exp]*1000;
+  let W=0,T=0;parts.forEach(q=>{W+=q.w;T+=q.w*q.v;});
+  if(d.side){const sd=d.side==="CALL"?1:-1;parts.push({k:"Proven history",v:sd,w:3});W+=3;T+=3*sd;}
+  const score=T/W,dir=d.side?(d.side==="CALL"?1:-1):(score>=0?1:-1),side=dir>0?"CALL":"PUT";
+  const conf=Math.max(1,Math.min(99,Math.round(50+50*score*dir)));
+  let win=null,winSrc="";
+  if(d.side&&d.stats.length){const b=d.stats.slice().sort((x,y)=>y.wr-x.wr)[0];win=b.wr;winSrc=b.src+", "+b.n+" past trades";}
+  else{const b=bestOf(v);if(b){win=b.wr;winSrc="pair best: "+b.src+", "+b.n+" trades";}}
+  let kind="wait";
+  if(s.stale)kind="closed";else if(d.side&&open)kind="signal";else if(d.off)kind="off";else if(d.conflict)kind="conflict";
+  else if(open&&conf>=56&&parts.filter(q=>Math.sign(q.v)===dir&&Math.abs(q.v)>0.2).length>=3)kind="lean";
+  const g={signal:3,lean:2,wait:1,conflict:1,off:0,closed:0}[kind];
+  return {p,s,d,v,parts,side,dir,conf,win,winSrc,kind,open,rank:g*1000+(win?win*100:0)+conf/100};
+}
+const ranked=()=>S.pairs.map(verdict).sort((a,b)=>b.rank-a.rank);
+function pickSetup(){const r=ranked().find(x=>x.kind==="signal")||ranked().find(x=>x.kind==="lean");return r||null;}
+
+/* ---- rendering ---- */
+function chipsHtml(ro){return ro.items.map(q=>`<span class="chip ${q.dir===1?"up":q.dir===-1?"dn":""}">${q.k} ${q.txt} ${q.dir===1?"▲":q.dir===-1?"▼":""}</span>`).join("");}
+function detailsHtml(x){
+  const d=x.d,v=x.v,ps=v.pats||[],stat=nm=>{const q=ps.find(z=>z.name===nm);return q?` (${pct(q.wr)} on ${q.n}${q.pass?", PROVEN":""})`:"";};
+  const ai=v.edge?`<small class="ok">AI proven: ${pct(v.wr)} on ${v.n} unseen trades (worst-case ${pct(v.low)}, break-even ${pct(v.be)})</small>`
+    :`<small class="bad">AI not proven right now${v.bestRaw?` (best seen ${pct(v.bestRaw.wr)} on ${v.bestRaw.n})`:""}.</small>`;
+  const rp=v.rules.filter(r=>r.pass),pp=ps.filter(q=>q.pass);
+  return `<details data-k="det"><summary class="sm">Full analysis</summary>
+    <div class="chips2">${chipsHtml(d.ro)}</div>
+    <small>AI: trees ${(d.pg*100).toFixed(0)}% up / logistic ${(d.pl*100).toFixed(0)}% up</small>
+    <small>Candle patterns (5m): ${d.ro.pats.length?d.ro.pats.map(q=>q[0]+stat(q[0])).join(", "):"none"} | strength bull ${d.ro.str.bull.toFixed(1)} / bear ${d.ro.str.bear.toFixed(1)}</small>
+    <small>Last 15m candle: ${d.ro.hp.length?d.ro.hp.map(q=>q[0]).join(", "):"no pattern"}</small>
+    ${d.side?`<small class="ok">Signal sources: ${d.srcs.join(" + ")}</small>`:""}${ai}
+    <small class="${rp.length?"ok":"bad"}">Strategies proven: ${rp.length?rp.map(r=>`${r.name} (${pct(r.wr)}, ${r.n})`).join("; "):"none right now"}</small>
+    <small class="${pp.length?"ok":"bad"}">Candle patterns proven: ${pp.length?pp.map(q=>`${q.name} (${pct(q.wr)}, ${q.n})`).join("; "):"none right now"}</small></details>
+   <details data-k="tests"><summary class="sm">Strategy and pattern tests (${S.exp} min)</summary>
+    ${v.rules.map(r=>`<small>${r.pass?"PASS":"fail"} | ${r.name}: ${pct(r.wr)} on ${r.n} (older ${pct(r.wrA)}, newer ${pct(r.wrB)})</small>`).join("")}
+    ${ps.map(q=>`<small>${q.pass?"PASS":"fail"} | ${q.dir>0?"▲":"▼"} ${q.name}: ${pct(q.wr)} on ${q.n}</small>`).join("")}</details>`;
+}
+function cardHtml(x,idx){
+  const rk=`<div class="rk ${["g","s","b"][idx]||""}">${idx+1}</div>`;
+  if(x.kind==="init"||(x.kind==="busy"))return `<div class="r1">${rk}<div><div class="pn">${x.p}</div><div class="pp">${x.s&&x.s.busy?esc(x.s.busy):"Waiting..."}</div></div><span class="pill wait">…</span></div><div class="sk scan"></div><div class="sk scan" style="width:70%"></div>`;
+  if(x.kind==="err")return `<div class="r1">${rk}<div><div class="pn">${x.p}</div><div class="pp" style="color:#e9a36a">${esc(x.s.err)}</div></div><span class="pill wait">ERROR</span></div>`;
+  const sc=x.side.toLowerCase(),arrow=x.dir>0?"▲":"▼";
+  const pill=x.kind==="signal"?`<span class="pill ${sc}">${x.side} ${arrow}</span>`:x.kind==="lean"?`<span class="pill lean ${sc}">${x.side}? ${arrow}</span>`
+    :`<span class="pill wait">${{off:x.d.off==="OFF-HOURS"?"OFF-HOURS":"VOLATILE",closed:"CLOSED",conflict:"CONFLICT",wait:"WAIT"}[x.kind]}</span>`;
+  const until=x.s.closeT+WIN[S.exp]*1000,exp=x.s.closeT+S.exp*60000;
+  const st=x.kind==="signal"?`<div class="st ok">✅ VALIDATED ${x.d.tier} · enter now · <b data-until="${until}">${mmss(Math.max(0,Math.ceil((until-Date.now())/1000)))}</b> left · expiry ${uM(exp)} UAE</div>`
+    :x.kind==="lean"?`<div class="st off">Lean only, not proven: demo account only</div>`
+    :x.kind==="off"?`<div class="st off">${x.d.off==="OFF-HOURS"?"Outside 11:00-20:00 UAE (strict filter)":"Candle too volatile, skipped"}</div>`
+    :x.kind==="closed"?`<div class="st">Market closed or data delayed</div>`
+    :x.kind==="conflict"?`<div class="st">Proven sources disagree: no trade</div>`:x.s.skip===Math.floor(Date.now()/TF())?`<div class="st off">Not refreshed this candle: the free data plan covers about 6 pairs per minute, so the top 5 pairs get priority. This pair takes its turn on a later candle.</div>`
+    :!x.open?`<div class="st">Entry window for this candle has passed: next check at the next candle close</div>`
+    :`<div class="st">No clear setup on this candle (leaning ${x.side})</div>`;
+  const bars=x.parts.map(q=>{const c=q.v>0.05?"up":q.v<-0.05?"dn":"";return `<span>${q.k}</span><div class="dv"><i class="${q.v>=0?"up":"dn"}" data-s="${q.v.toFixed(3)}"></i></div><span class="vv ${c}">${q.v>0.05?"▲":q.v<-0.05?"▼":"–"}${Math.round(Math.abs(q.v)*100)}</span>`;}).join("");
+  return `<div class="r1">${rk}<div><div class="pn">${x.p}${x.s.busy?'<span class="upd">updating</span>':""}</div><div class="pp">${(+x.s.price).toFixed(x.p.includes("JPY")?3:5)} · candle ${uM(x.s.t)}–${uM(x.s.closeT)} closed · checked ${uS(x.s.at||x.s.closeT)}</div></div>${pill}</div>
+   <div class="mt"><div><div class="lb">Confidence <b>${x.conf}%</b></div><div class="bar"><i data-s="${(x.conf/100).toFixed(3)}"></i></div></div>
+     <div><div class="lb">Win analytics <b>${x.win?pct(x.win):"–"}</b></div><div class="bar w"><i data-s="${x.win?Math.max(0,(x.win-0.4)/0.35).toFixed(3):0}"></i></div></div></div>
+   <div class="pp" style="margin-top:3px">${x.win?x.winSrc:"not proven on this pair yet"}</div>
+   <div class="bd">${bars}</div>${st}${detailsHtml(x)}`;
+}
+const cards={},lastSide={};
+const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function animScale(el,from,to){el.style.transform=`scaleX(${to})`;if(!reduced&&from!==to)el.animate([{transform:`scaleX(${from})`},{transform:`scaleX(${to})`}],{duration:800,easing:"cubic-bezier(.2,.8,.2,1)"});}
+function renderPairs(){
+  const list=$("pairs"),rows=ranked(),before={};
+  for(const k in cards)if(cards[k].isConnected)before[k]=cards[k].getBoundingClientRect().top;
+  rows.forEach((x,idx)=>{
+    let el=cards[x.p];const isNew=!el;
+    if(isNew){el=cards[x.p]=document.createElement("div");el.className="pc enter";el.dataset.p=x.p;}
+    const html=cardHtml(x,idx);
+    if(el._h!==html){
+      const old={},open=[...el.querySelectorAll("details[open]")].map(q=>q.dataset.k);
+      el.querySelectorAll("[data-s]").forEach((q,j)=>old[j]=q.style.transform.match(/scaleX\(([-\d.e]+)\)/)?.[1]??"0");
+      el.innerHTML=html;el._h=html;
+      open.forEach(k=>{const q=el.querySelector(`details[data-k="${k}"]`);if(q)q.open=true;});
+      el.querySelectorAll("[data-s]").forEach((q,j)=>animScale(q,isNew?"0":(old[j]??"0"),q.dataset.s));
+    }
+    el.className="pc"+(isNew?" enter":"")+(x.side&&x.kind!=="wait"&&x.kind!=="off"&&x.kind!=="closed"?" "+x.side.toLowerCase():"")+(x.kind==="signal"?" sig":"");
+    const sig=x.kind==="signal"||x.kind==="lean"?x.side:"";
+    if(!isNew&&sig&&lastSide[x.p]!==sig&&!reduced){el.classList.add("flash");}lastSide[x.p]=sig;
+    list.appendChild(el);
+  });
+  for(const k in cards)if(!S.pairs.includes(k)){cards[k].remove();delete cards[k];}
+  if(!reduced)rows.forEach(x=>{const el=cards[x.p],b=before[x.p];if(b===undefined)return;const dy=b-el.getBoundingClientRect().top;
+    if(Math.abs(dy)>2)el.animate([{transform:`translateY(${dy}px)`},{transform:"none"}],{duration:600,easing:"cubic-bezier(.2,.8,.2,1)"});});
+}
+function reasonsFor(x){const r=[];
+  x.d.ro.pats.forEach(q=>{if(q[1]===x.dir)r.push(q[0]);});x.d.ro.hp.forEach(q=>{if(q[1]===x.dir)r.push("15m "+q[0]);});
+  x.d.ro.items.forEach(q=>{if(q.dir===x.dir)r.push(q.k+" "+q.txt);});return r;}
+let heroKey="";
+/* ---- blue wireframe AI animation: per pair, 1) collect data  2) analyse (EMA, Bollinger, scan)  3) predict up/down cone ---- */
+let scanRAF=null;
+function startScan(){
+  const cv=$("scCv");if(!cv)return;
+  const dpr=Math.min(2,window.devicePixelRatio||1),W=cv.clientWidth||340,H=210;cv.width=W*dpr;cv.height=H*dpr;
+  const g=cv.getContext("2d");g.scale(dpr,dpr);
+  const CYC=10500,P1=3200,P2=6800,N=56,X0=10,X1=W*0.68,TOP=16,BOT=H*0.70,t0=performance.now();
+  let idx=-1,D=null;
+  const lerp=(a,b,t)=>a+(b-a)*t,ease=t=>1-Math.pow(1-Math.min(1,Math.max(0,t)),3);
+  function prep(i){
+    const p=S.pairs[i%S.pairs.length],h=hist[p+"|"+tfm()];let c;
+    if(h&&h.length>N+25)c=h.slice(-(N+25)).map(x=>x.c);
+    else{c=[];const ph=p.length+i;for(let j=0;j<N+25;j++)c.push(Math.sin(j/7+ph)*0.8+Math.sin(j/17+ph)*1.4+Math.sin(j*1.9)*0.12);}
+    const ema=[],k=2/21;c.forEach((v,j)=>ema.push(j?v*k+ema[j-1]*(1-k):v));
+    const up=[],lo=[];for(let j=0;j<c.length;j++){const w=c.slice(Math.max(0,j-19),j+1),m=w.reduce((a,b)=>a+b,0)/w.length,sd=Math.sqrt(w.reduce((a,b)=>a+(b-m)**2,0)/w.length);up.push(m+2*sd);lo.push(m-2*sd);}
+    const sl=a=>a.slice(-N),C=sl(c),E=sl(ema),U=sl(up),L=sl(lo);
+    let mn=Math.min(...L,...C),mx=Math.max(...U,...C);const pad=(mx-mn)*0.25||1;mn-=pad;mx+=pad;
+    const v=verdict(p),has=!!v.d;
+    D={p,C,E,U,L,mn,mx,has,dir:has?v.dir:(C[N-1]>=C[N-8]?1:-1),conf:has?v.conf:null,win:has?v.win:null,jpy:p.includes("JPY"),real:!!(h&&h.length>N+25)};
+    const e=$("scPair");if(e){e.style.opacity=0;setTimeout(()=>{e.textContent=p;e.style.opacity=1;},250);}
+  }
+  const X=j=>lerp(X0,X1,j/(N-1)),Y=v=>lerp(BOT,TOP,(v-D.mn)/(D.mx-D.mn));
+  function line(arr,n,col,w,dash){g.beginPath();for(let j=0;j<n;j++){const x=X(j),y=Y(arr[j]);j?g.lineTo(x,y):g.moveTo(x,y);}
+    g.strokeStyle=col;g.lineWidth=w;g.setLineDash(dash||[]);g.stroke();g.setLineDash([]);}
+  function floor(el){                       // perspective wireframe floor moving toward the viewer
+    const hz=BOT+8,vp=W/2;g.lineWidth=1;
+    for(let k=-10;k<=10;k++){g.beginPath();g.moveTo(vp+k*8,hz);g.lineTo(vp+k*70,H);g.strokeStyle="rgba(56,189,248,0.16)";g.stroke();}
+    const sp=(el/1400)%1;for(let k=0;k<7;k++){const t=(k+sp)/7,y=hz+(H-hz)*t*t;g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.strokeStyle=`rgba(56,189,248,${0.06+0.2*t})`;g.stroke();}
+  }
+  function frame(now){
+    if(heroKey!=="scan"||!cv.isConnected){scanRAF=null;return;}
+    const el=Math.max(0,now-t0),ci=Math.floor(el/CYC),tc=reduced?CYC*0.9:el%CYC;
+    if(ci!==idx){idx=ci;prep(ci);}
+    const stage=tc<P1?0:tc<P2?1:2;
+    for(let k=0;k<3;k++){const e=$("st"+k);if(e)e.classList.toggle("on",k===stage);}
+    g.clearRect(0,0,W,H);
+    // background wire grid (slowly drifting left = chart moving)
+    const drift=(el/60)%24;g.lineWidth=1;g.strokeStyle="rgba(96,165,250,0.08)";
+    for(let x=-drift;x<W;x+=24){g.beginPath();g.moveTo(x,TOP-8);g.lineTo(x,BOT);g.stroke();}
+    for(let y=TOP;y<=BOT;y+=22){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();}
+    floor(el);
+    const fade=tc>CYC-500?(CYC-tc)/500:1;g.globalAlpha=fade;
+    // 1) COLLECT: points stream in from the right
+    const n=Math.max(2,Math.round(ease(tc/(P1*0.9))*N));
+    if(stage===0){for(let q=0;q<6;q++){const t=((el/700)+q/6)%1,j=Math.min(N-1,n+q),x=lerp(W,X(j),t),y=Y(D.C[j]);
+        g.fillStyle=`rgba(125,211,252,${0.8*(1-t)})`;g.fillRect(x-1.5,y-1.5,3,3);}}
+    // vertical wire drops under the price line (wireframe look)
+    for(let j=0;j<n;j+=2){const x=X(j),y=Y(D.C[j]);g.beginPath();g.moveTo(x,y);g.lineTo(x,BOT);g.strokeStyle="rgba(56,189,248,0.10)";g.stroke();}
+    line(D.C,n,"#7dd3fc",1.4);
+    for(let j=0;j<n;j+=4){g.beginPath();g.arc(X(j),Y(D.C[j]),1.6,0,7);g.fillStyle="#bae6fd";g.fill();}
+    // 2) ANALYSE: indicators draw in, scan bar sweeps, pattern rings
+    if(stage>=1){const t=stage===1?ease((tc-P1)/(P2-P1-600)):1,m=Math.max(2,Math.round(t*N));
+      line(D.U,m,"rgba(147,197,253,0.45)",1,[3,4]);line(D.L,m,"rgba(147,197,253,0.45)",1,[3,4]);line(D.E,m,"#a78bfa",1.2);
+      if(stage===1){const sx=lerp(X0,X1,Math.min(1,(tc-P1)/(P2-P1)));const gr=g.createLinearGradient(sx-30,0,sx,0);gr.addColorStop(0,"rgba(56,189,248,0)");gr.addColorStop(1,"rgba(56,189,248,0.25)");
+        g.fillStyle=gr;g.fillRect(sx-30,TOP-8,30,BOT-TOP+8);g.fillStyle="#7dd3fc";g.fillRect(sx,TOP-8,1,BOT-TOP+8);}
+      for(let j=6;j<m;j+=11){const r=4+2*Math.sin(el/250+j);g.beginPath();g.arc(X(j),Y(D.C[j]),r,0,7);g.strokeStyle="rgba(250,204,21,0.55)";g.lineWidth=1;g.stroke();}
+      g.font="600 10px system-ui,sans-serif";g.fillStyle="rgba(167,139,250,0.9)";g.textAlign="left";g.fillText("EMA 20",X0+2,TOP+2);
+      g.fillStyle="rgba(147,197,253,0.8)";g.fillText("Bollinger",X0+48,TOP+2);g.fillStyle="rgba(250,204,21,0.8)";g.fillText("patterns",X0+104,TOP+2);}
+    // 3) PREDICT: wireframe cone fanning up or down from the last price
+    const lx=X(N-1),ly=Y(D.C[N-1]),col=D.dir>0?"74,222,128":"248,113,113";
+    if(stage===2){const t=ease((tc-P2)/1600),len=(W-12-lx)*t,span=(BOT-TOP)*0.42*t,mid=-D.dir*span*0.75;
+      for(let r=0;r<7;r++){const f=(r-3)/3,ey=ly+mid+f*span*0.45;g.beginPath();g.moveTo(lx,ly);g.lineTo(lx+len,ey);
+        g.strokeStyle=`rgba(${col},${r===3?0.95:0.25})`;g.lineWidth=r===3?1.6:1;g.setLineDash(r===3?[5,4]:[]);g.stroke();}
+      g.setLineDash([]);
+      for(let k=1;k<=4;k++){const x=lx+len*k/4,s=span*0.45*k/4;g.beginPath();g.moveTo(x,ly+mid*k/4-s);g.lineTo(x,ly+mid*k/4+s);g.strokeStyle=`rgba(${col},0.22)`;g.stroke();}
+      if(t>0.95){const ax=lx+len,ay=ly+mid,pu=1+0.15*Math.sin(el/180);g.beginPath();
+        g.moveTo(ax,ay-D.dir*9*pu);g.lineTo(ax-6*pu,ay+D.dir*3*pu);g.lineTo(ax+6*pu,ay+D.dir*3*pu);g.closePath();g.fillStyle=`rgb(${col})`;g.shadowColor=`rgb(${col})`;g.shadowBlur=12;g.fill();g.shadowBlur=0;}}
+    // live price head
+    const hx=X(n-1),hy=Y(D.C[n-1]),pr=2.5+1.5*Math.sin(el/200);
+    g.beginPath();g.arc(hx,hy,pr+4,0,7);g.fillStyle="rgba(125,211,252,0.18)";g.fill();g.beginPath();g.arc(hx,hy,pr,0,7);g.fillStyle="#e0f2fe";g.fill();
+    if(D.real){g.font="600 10px system-ui,sans-serif";g.textAlign="right";g.fillStyle="#bae6fd";g.fillText(D.C[n-1].toFixed(D.jpy?3:5),W-6,TOP+2);}
+    g.globalAlpha=1;
+    const e=$("scHit");if(e){const txt=stage===0?`Collecting ${n} of ${N} candles...`:stage===1?`Analysing indicators, candle patterns and trend... ${Math.round(ease((tc-P1)/(P2-P1))*100)}%`
+      :!D.has?"Prediction: waiting for live data":`Prediction: <span class="${D.dir>0?"u":"d"}">${D.dir>0?"▲ UP":"▼ DOWN"}</span> · confidence ${D.conf}%${D.win?` · win ${pct(D.win)}`:""}`;
+      if(e._t!==txt){e._t=txt;e.innerHTML=txt;}}
+    if(reduced){scanRAF=null;return;}
+    scanRAF=requestAnimationFrame(frame);
+  }
+  if(scanRAF)cancelAnimationFrame(scanRAF);scanRAF=requestAnimationFrame(frame);
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&heroKey==="scan"&&!scanRAF)startScan();});
+function bannerHtml(){
+  const b=$("banner"),c=pickSetup(),now=Date.now();
+  if(!c){const tf=TF(),nxt=Math.ceil(now/tf)*tf,key="scan";
+    if(heroKey!==key){heroKey=key;b.className="wire";
+      b.innerHTML=`<div class="wtop"><span>AI analysis · <b id="scPair">${esc(S.pairs[0])}</b></span><span>${S.pairs.length} pairs · ${S.exp} min</span></div>
+       <div class="steps"><span id="st0">1 Collect</span><span id="st1">2 Analyse</span><span id="st2">3 Predict</span></div>
+       <canvas class="wcv" id="scCv"></canvas>
+       <div class="wread" id="scHit">Collecting data...</div>
+       <div class="wsub">No signal locked yet. Next ${tfm()}m candle closes at <b data-next="1">${uS(nxt)}</b> UAE</div>`;
+      startScan();}
+    const n=b.querySelector("[data-next]");if(n)n.textContent=uS(nxt);return;}
+  const closeT=c.s.closeT,until=closeT+WIN[S.exp]*1000,expiryAt=closeT+S.exp*60000,ok=c.kind==="signal";
+  const key=[c.p,c.side,closeT,c.kind,c.conf,c.win].join("|");
+  if(heroKey!==key){heroKey=key;const rs=reasonsFor(c),idx=ranked().findIndex(x=>x.p===c.p);
+    b.className=c.side.toLowerCase()+(ok?"":" unv");
+    b.innerHTML=`<div class="pop"><span class="hrank">#${idx+1} ${ok?"BEST SIGNAL":"BEST LEAN · DEMO ONLY"}</span>
+     <div class="hpair">${c.p}</div>
+     <div class="hdir"><span class="arw">${c.dir>0?"▲":"▼"}</span>${c.side}</div>
+     <div class="hstats"><div class="hstat"><b>${c.conf}%</b><span>confidence</span></div>
+       <div class="ring"><svg width="74" height="74"><circle class="bg" cx="37" cy="37" r="31"/><circle class="fg" cx="37" cy="37" r="31" stroke-dasharray="194.8" stroke-dashoffset="0"/></svg><div data-left="1">0:00</div></div>
+       <div class="hstat"><b>${c.win?pct(c.win):"–"}</b><span>win analytics</span></div></div>
+     <div class="hline">Entry <b>${uS(closeT)}</b> → Expiry <b>${uS(expiryAt)}</b> UAE (${S.exp} min)</div>
+     <div class="hiq">IQ Option: <b>${c.p.replace("/","")}</b> → tap <b>${c.side==="CALL"?"HIGHER ▲":"LOWER ▼"}</b> → expiry <b>${uM(expiryAt)}</b></div>
+     <div class="hline">${ok?`Validated ${c.d.tier}: ${c.d.srcs.join(" + ")}`:"Not validated: practise on demo"}</div>
+     <div class="hline" style="opacity:.85">${rs.length?"Why: "+rs.slice(0,6).join(", "):""}</div>
+     ${ok?"":`<button class="logb" data-act="log" data-pair="${c.p}">Log this as my demo trade</button>`}</div>`;}
+  const left=Math.max(0,Math.ceil((until-now)/1000)),tot=WIN[S.exp];
+  const t=b.querySelector("[data-left]");if(t)t.textContent=mmss(left);
+  const fg=b.querySelector(".fg");if(fg)fg.setAttribute("stroke-dashoffset",(194.8*(1-left/tot)).toFixed(1));
+}
+function logHtml(){
+  const rows=[...LOG].reverse().slice(0,25),W=LOG.filter(x=>x.res==="W").length,L=LOG.filter(x=>x.res==="L").length,n=W+L,be=100/(1+S.payout/100);
+  $("stats").textContent=n?`Your results: ${W} wins, ${L} losses | win rate ${(W/n*100).toFixed(1)}% (break-even ${be.toFixed(1)}%)`:"Mark each trade Win or Loss to see your real win rate.";
+  $("log").innerHTML=rows.length?rows.map(x=>`<div class="lg"><div>${uM(x.closeT)} | ${x.pair} <b class="${x.side.toLowerCase()}t">${x.side}</b> | ${x.exp}m | ${x.validated?"validated "+(x.tier||""):"demo"} | exp ${uM(x.expiryAt)}</div>
+   <div>${x.res?`<span class="res ${x.res}">${x.res==="W"?"WIN":"LOSS"}</span>`:`<button data-id="${x.id}" data-r="W" class="mini w">Win</button><button data-id="${x.id}" data-r="L" class="mini l">Loss</button>`}</div></div>`).join(""):"No trades logged yet.";
+}
+function render(){
+  renderPairs();
+  $("credit").textContent="OTC data from your IQ Option demo account (Termux server). No daily limits.";
+  document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",+b.dataset.e===S.exp));
+  bannerHtml();logHtml();
+}
+function tick(){
+  const tf=TF(),now=Date.now(),nxt=Math.ceil(now/tf)*tf,left=Math.ceil((nxt-now)/1000);
+  $("clock").innerHTML=`UAE <b>${uS(now)}</b> | next ${tfm()}m candle opens <b>${uS(nxt)}</b> in ${mmss(left)}`;bannerHtml();
+  document.querySelectorAll("[data-until]").forEach(e=>{const l=Math.max(0,Math.ceil((+e.dataset.until-now)/1000));e.textContent=mmss(l);});
+  if(now%5000<1000)renderPairs();
+}
+function setChart(){}
+function drawChips(){
+  $("chips").innerHTML=ALL.map(p=>`<label><input type="checkbox" data-p="${p}" ${S.pairs.includes(p)?"checked":""}> ${p}</label>`).join("");
+  document.querySelectorAll("#chips input").forEach(cb=>cb.onchange=()=>{
+    S.pairs=[...document.querySelectorAll("#chips input:checked")].map(x=>x.dataset.p);
+    if(!S.pairs.length){cb.checked=true;S.pairs=[cb.dataset.p];}save();render();refreshNow();});
+}
+const resetAll=()=>{for(const k in state)delete state[k];heroKey="";};
+
+async function start(){
+  S.payout=+$("payout").value;
+  save();$("setup").style.display="none";$("main").style.display="block";
+  $("strict").checked=S.strict;$("auto").checked=S.auto;$("payout2").value=String(S.payout);
+  drawChips();setChart();
+  try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();audioCtx.resume();}catch(e){}
+  try{wake=await navigator.wakeLock.request("screen");}catch(e){}
+  getWorker();render();clearInterval(ticker);ticker=setInterval(tick,1000);tick();refreshNow();
+}
+function stop(){clearTimeout(timer);clearInterval(ticker);try{wake&&wake.release();}catch(e){}$("main").style.display="none";$("setup").style.display="block";}
+
+try{$("payout").value=String(S.payout);}catch(e){}
+fetch("api/status",{cache:"no-store"}).then(r=>r.json()).then(j=>{$("srv").textContent="Termux server: "+(j.status==="connected"?"connected to IQ Option (demo)":j.status);$("srv").style.color="#6fdc8c";})
+  .catch(()=>{$("srv").textContent="Termux server not found. Open Termux and run: bash start.sh";$("srv").style.color="#e9a36a";});
+$("wipe").onclick=()=>{if(!confirm("Remove the OTC trade log and all saved OTC app data?"))return;
+  try{localStorage.clear();sessionStorage.clear();}catch(e){}LOG=[];stop();
+  try{caches.keys().then(k=>k.forEach(n=>caches.delete(n)));}catch(e){}alert("All saved data removed from this phone.");};
+$("start").onclick=start;$("bestBtn").onclick=findBest;$("stop").onclick=stop;$("refresh").onclick=refreshNow;
+document.querySelectorAll("#seg button").forEach(b=>b.onclick=()=>{S.exp=+b.dataset.e;save();resetAll();setChart();render();refreshNow();});
+$("strict").onchange=e=>{S.strict=e.target.checked;save();resetAll();bestRes=null;renderBest();render();refreshNow();};
+$("payout2").onchange=e=>{S.payout=+e.target.value;save();resetAll();bestRes=null;renderBest();render();refreshNow();};
+$("auto").onchange=e=>{S.auto=e.target.checked;save();schedule();};
+$("clear").onclick=()=>{if(confirm("Clear your trade log?")){LOG=[];saveLog();render();}};
+$("log").onclick=e=>{const b=e.target.closest("button[data-id]");if(!b)return;const x=LOG.find(l=>l.id===b.dataset.id);if(x){x.res=b.dataset.r;saveLog();render();}};
+$("banner").onclick=e=>{const b=e.target.closest("button[data-act]");if(!b)return;const x=verdict(b.dataset.pair);
+  if(x.d){addLog(x.p,x.side,null,[],x.d.p,x.s.closeT,false);b.textContent="Logged ✓";b.disabled=true;logHtml();}};
+document.addEventListener("visibilitychange",async()=>{if(document.visibilityState==="visible"&&$("main").style.display==="block"){try{wake=await navigator.wakeLock.request("screen");}catch(e){}refreshNow();}});
+if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(()=>{});}
+
+</script>
+</body></html>

@@ -148,7 +148,7 @@ summary{cursor:pointer;font-weight:700;padding:8px 0}
   <div class="grid"><button id="stop" style="background:#27324a">Back to start</button><button id="wipe" style="background:#4b1d1d">Forget all data</button></div>
 </div>
 
-<p class="note">How it works: for each pair the app downloads about 5000 one-minute candles and reads 49 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger squeeze, EMAs, RSI divergence, 32 candle patterns scored by location plus patterns on the 15-minute candle, support and resistance, 15-minute and 1-hour trend, time of day). Two AI models trained in the background (gradient-boosted trees + logistic regression) must agree on the direction for the chosen expiry (2, 3 or 5 min), and 10 classic strategies plus every candle pattern are tested on this pair's own history. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
+<p class="note">How it works: for each pair the app downloads about 5000 one-minute candles and reads 49 values (RSI, MACD, Stochastic, ADX, CCI, Aroon, Bollinger squeeze, EMAs, RSI divergence, 32 candle patterns scored by location plus patterns on the 15-minute candle, support and resistance, 15-minute and 1-hour trend, time of day). Two AI models trained in the background (gradient-boosted trees + logistic regression) must agree on the direction for the chosen expiry (2, 3 or 5 min), and 10 classic strategies, 12 OTC strategies and every candle pattern are tested on this pair's own history. Only what beats break-even on unseen history is VALIDATED (quality A+ = AI and a strategy agree, A = AI, B = strategy). A dashed yellow setup is the AI's best guess but is not proven: use the demo account for it. Analysis of a new candle takes a few milliseconds; the wait is the free data feed. Nothing can guarantee wins.</p>
 
 <script id="core">
 /* ===== CORE: indicators, candle patterns, strategy library, tree-boosting AI, validation ===== */
@@ -205,6 +205,11 @@ function buildInd(cs){
     if(l[i]<l[jl]&&ind.r14[i]>ind.r14[jl]+2)dv[i]=1;else if(h[i]>h[jh]&&ind.r14[i]<ind.r14[jh]-2)dv[i]=-1;}
   ind.div=dv;
   ind.h15=htf(ind,15);ind.h60=htf(ind,60);
+  /* OTC extras: fast EMAs, fast Stochastic(5,3), signed colour streak */
+  ind.e5=emaArr(c,5);ind.e13=emaArr(c,13);
+  const r5=new Array(n).fill(NaN);for(let i=4;i<n;i++){let lo=Infinity,hi=-Infinity;for(let j=i-4;j<=i;j++){if(l[j]<lo)lo=l[j];if(h[j]>hi)hi=h[j];}r5[i]=100*(c[i]-lo)/(hi-lo+1e-12);}
+  ind.K5=smaArr(r5.map(v=>isNaN(v)?50:v),3);ind.D5=smaArr(ind.K5.map(v=>isNaN(v)?50:v),3);
+  const sk=new Array(n).fill(0);for(let i=0;i<n;i++){const d=c[i]>o[i]?1:c[i]<o[i]?-1:0;sk[i]=d===0?0:(i&&Math.sign(sk[i-1])===d?sk[i-1]+d:d);}ind.streak=sk;
   return ind;
 }
 /* higher-timeframe view built from the same candles (no extra credits, no look-ahead: only CLOSED higher candles are used) */
@@ -304,7 +309,28 @@ const RULES=[
    if(dn&&x.r14[i-1]>55&&x.r14[i]<=55&&x.c[i]<x.o[i])return -1;return 0;}},
  {id:"div",name:"RSI divergence reversal",fn:(x,i)=>{
    if((x.div[i]===1||x.div[i-1]===1)&&x.c[i]>x.o[i]&&x.c[i]<x.bbm[i])return 1;
-   if((x.div[i]===-1||x.div[i-1]===-1)&&x.c[i]<x.o[i]&&x.c[i]>x.bbm[i])return -1;return 0;}}
+   if((x.div[i]===-1||x.div[i-1]===-1)&&x.c[i]<x.o[i]&&x.c[i]>x.bbm[i])return -1;return 0;}},
+ /* ===== OTC strategy pack: popular OTC setups. Each one must prove itself on the pair's own OTC history ===== */
+ {id:"o_exh",name:"OTC streak exhaustion (4+ same colour, reverse)",fn:(x,i)=>Math.abs(x.streak[i])>=4?-Math.sign(x.streak[i]):0},
+ {id:"o_mom",name:"OTC streak momentum (3 same colour, continue)",fn:(x,i)=>Math.abs(x.streak[i])===3?Math.sign(x.streak[i]):0},
+ {id:"o_bbw",name:"OTC Bollinger wick rejection",fn:(x,i)=>{const R=x.h[i]-x.l[i]+1e-12,uw=x.h[i]-Math.max(x.o[i],x.c[i]),lw=Math.min(x.o[i],x.c[i])-x.l[i];
+   if(x.l[i]<=x.lo[i]&&lw/R>=0.5&&x.c[i]>x.lo[i])return 1;if(x.h[i]>=x.hi[i]&&uw/R>=0.5&&x.c[i]<x.hi[i])return -1;return 0;}},
+ {id:"o_rsi7",name:"OTC RSI(7) extreme reversal",fn:(x,i)=>{if(x.r7[i]<15&&x.c[i]>x.o[i])return 1;if(x.r7[i]>85&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"o_round",name:"OTC round-number rejection",fn:(x,i)=>{const st=x.c[i]>20?0.05:0.0005,a=x.atr[i],R=x.h[i]-x.l[i]+1e-12;
+   const up=Math.ceil(x.h[i]/st)*st,dn=Math.floor(x.l[i]/st)*st;
+   if(Math.abs(x.h[i]-up)<=0.15*a&&(x.h[i]-Math.max(x.o[i],x.c[i]))/R>=0.4&&x.c[i]<x.o[i])return -1;
+   if(Math.abs(x.l[i]-dn)<=0.15*a&&(Math.min(x.o[i],x.c[i])-x.l[i])/R>=0.4&&x.c[i]>x.o[i])return 1;return 0;}},
+ {id:"o_spkr",name:"OTC spike reversal (body > 2 ATR, fade it)",fn:(x,i)=>Math.abs(x.c[i]-x.o[i])>=2*x.atr[i]?-Math.sign(x.c[i]-x.o[i]):0},
+ {id:"o_spkc",name:"OTC spike continuation (body > 2 ATR, follow it)",fn:(x,i)=>Math.abs(x.c[i]-x.o[i])>=2*x.atr[i]?Math.sign(x.c[i]-x.o[i]):0},
+ {id:"o_st5",name:"OTC fast Stochastic(5,3) extreme cross",fn:(x,i)=>{
+   if(x.K5[i]<20&&x.K5[i]>x.D5[i]&&x.K5[i-1]<=x.D5[i-1])return 1;if(x.K5[i]>80&&x.K5[i]<x.D5[i]&&x.K5[i-1]>=x.D5[i-1])return -1;return 0;}},
+ {id:"o_ema",name:"OTC EMA 5/13 cross with EMA 50 trend",fn:(x,i)=>{
+   if(x.e5[i]>x.e13[i]&&x.e5[i-1]<=x.e13[i-1]&&x.c[i]>x.e50[i])return 1;if(x.e5[i]<x.e13[i]&&x.e5[i-1]>=x.e13[i-1]&&x.c[i]<x.e50[i])return -1;return 0;}},
+ {id:"o_dbl",name:"OTC double bottom / double top",fn:(x,i)=>{let lo=Infinity,hi=-Infinity;for(let j=i-15;j<=i-3;j++){if(x.l[j]<lo)lo=x.l[j];if(x.h[j]>hi)hi=x.h[j];}
+   const a=x.atr[i];if(Math.abs(x.l[i]-lo)<=0.15*a&&x.c[i]>x.o[i])return 1;if(Math.abs(x.h[i]-hi)<=0.15*a&&x.c[i]<x.o[i])return -1;return 0;}},
+ {id:"o_doji",name:"OTC doji after a 3+ candle run (reverse)",fn:(x,i)=>{const R=x.h[i]-x.l[i]+1e-12;return Math.abs(x.c[i]-x.o[i])/R<=0.1&&Math.abs(x.streak[i-1])>=3?-Math.sign(x.streak[i-1]):0;}},
+ {id:"o_eng",name:"OTC engulfing against a 3+ candle run",fn:(x,i)=>{const s=x.streak[i-1];if(Math.abs(s)<3)return 0;
+   if(s<0&&x.c[i]>x.o[i]&&x.c[i]>=x.o[i-1]&&x.o[i]<=x.c[i-1])return 1;if(s>0&&x.c[i]<x.o[i]&&x.c[i]<=x.o[i-1]&&x.o[i]>=x.c[i-1])return -1;return 0;}}
 ];
 
 function featRow(ind,i){
@@ -426,7 +452,7 @@ function validateAndTrain(cs,k,payout,strict,tf){
       n++;w+=win;if(j<half){nA++;wA+=win;}else{nB++;wB+=win;}
     });
     const wr=n?w/n:0,low=wilsonLow(w,n,1.96),wrA=nA?wA/nA:0,wrB=nB?wB/nB:0;
-    rules.push({id:R.id,name:R.name,n,wr,low,wrA,wrB,nA,nB,pass:n>=80&&low>be&&nA>=30&&nB>=30&&wrA>be&&wrB>be});
+    rules.push({id:R.id,name:R.name,n,wr,low,wrA,wrB,nA,nB,pass:n>=100&&low>be&&nA>=40&&nB>=40&&wrA>be&&wrB>be});
   }
   /* how each candle pattern actually performed on THIS pair at THIS expiry */
   const PS={},addP=(name,dir,win,older)=>{const q=PS[name]||(PS[name]={name,dir,n:0,w:0,nA:0,wA:0,nB:0,wB:0});q.n++;q.w+=win;if(older){q.nA++;q.wA+=win;}else{q.nB++;q.wB+=win;}};
@@ -435,8 +461,8 @@ function validateAndTrain(cs,k,payout,strict,tf){
     for(const p of pl){if(!p[1])continue;addP(p[0],p[1],(p[1]===1&&y[i]===1)||(p[1]===-1&&y[i]===0)?1:0,older);}
     const cd=clusterDir(patStrength(ind,i,pl));if(cd)addP(PCLUSTER[cd===1?0:1],cd,(cd===1&&y[i]===1)||(cd===-1&&y[i]===0)?1:0,older);
   });
-  const pats=Object.values(PS).map(q=>{const wr=q.w/q.n,low=wilsonLow(q.w,q.n,1.64),wrA=q.nA?q.wA/q.nA:0,wrB=q.nB?q.wB/q.nB:0;
-    return Object.assign(q,{wr,low,wrA,wrB,pass:q.n>=50&&low>be&&q.nA>=15&&q.nB>=15&&wrA>be&&wrB>be});}).sort((p,q)=>q.n-p.n);
+  const pats=Object.values(PS).map(q=>{const wr=q.w/q.n,low=wilsonLow(q.w,q.n,1.96),wrA=q.nA?q.wA/q.nA:0,wrB=q.nB?q.wB/q.nB:0;
+    return Object.assign(q,{wr,low,wrA,wrB,pass:q.n>=100&&low>be&&q.nA>=40&&q.nB>=40&&wrA>be&&wrB>be});}).sort((p,q)=>q.n-p.n);
   const cut=Math.floor(rows.length*0.7),trainIdx=rows.slice(0,cut),lastTrain=trainIdx[trainIdx.length-1];
   const testIdx=rows.slice(cut).filter(i=>i>lastTrain+k);
   const mv=trainModel(X,y,trainIdx),ps=testIdx.map(i=>[predictG(mv.gb,X[i]),predictL(mv.lr,X[i])]);
@@ -721,13 +747,14 @@ function verdict(p){
   if(d.side&&d.stats.length){const b=d.stats.slice().sort((x,y)=>y.wr-x.wr)[0];win=b.wr;winSrc=b.src+", "+b.n+" past trades";}
   else{const b=bestOf(v);if(b){win=b.wr;winSrc="pair best: "+b.src+", "+b.n+" trades";}}
   let kind="wait";
-  if(s.stale)kind="closed";else if(d.side&&open)kind="signal";else if(d.off)kind="off";else if(d.conflict)kind="conflict";
+  if(s.stale)kind="closed";else if(d.side&&open&&conf<OTC_MIN_CONF)kind="weak";else if(d.side&&open)kind="signal";else if(d.off)kind="off";else if(d.conflict)kind="conflict";
   else if(open&&conf>=56&&parts.filter(q=>Math.sign(q.v)===dir&&Math.abs(q.v)>0.2).length>=3)kind="lean";
-  const g={signal:3,lean:2,wait:1,conflict:1,off:0,closed:0}[kind];
+  const g={signal:3,lean:2,weak:1,wait:1,conflict:1,off:0,closed:0}[kind];
   return {p,s,d,v,parts,side,dir,conf,win,winSrc,kind,open,rank:g*1000+(win?win*100:0)+conf/100};
 }
 const ranked=()=>S.pairs.map(verdict).sort((a,b)=>b.rank-a.rank);
-function pickSetup(){const r=ranked().find(x=>x.kind==="signal")||ranked().find(x=>x.kind==="lean");return r||null;}
+const OTC_MIN_CONF=58;   // OTC: a proven source must also be backed by the rest of the analysis
+function pickSetup(){return ranked().find(x=>x.kind==="signal")||null;}   // OTC: only validated signals reach the big card
 
 /* ---- rendering ---- */
 function chipsHtml(ro){return ro.items.map(q=>`<span class="chip ${q.dir===1?"up":q.dir===-1?"dn":""}">${q.k} ${q.txt} ${q.dir===1?"▲":q.dir===-1?"▼":""}</span>`).join("");}
@@ -754,13 +781,14 @@ function cardHtml(x,idx){
   if(x.kind==="err")return `<div class="r1">${rk}<div><div class="pn">${x.p}</div><div class="pp" style="color:#e9a36a">${esc(x.s.err)}</div></div><span class="pill wait">ERROR</span></div>`;
   const sc=x.side.toLowerCase(),arrow=x.dir>0?"▲":"▼";
   const pill=x.kind==="signal"?`<span class="pill ${sc}">${x.side} ${arrow}</span>`:x.kind==="lean"?`<span class="pill lean ${sc}">${x.side}? ${arrow}</span>`
-    :`<span class="pill wait">${{off:x.d.off==="OFF-HOURS"?"OFF-HOURS":"VOLATILE",closed:"CLOSED",conflict:"CONFLICT",wait:"WAIT"}[x.kind]}</span>`;
+    :`<span class="pill wait">${{off:x.d.off==="OFF-HOURS"?"OFF-HOURS":"VOLATILE",closed:"CLOSED",conflict:"CONFLICT",weak:"SKIP",wait:"WAIT"}[x.kind]}</span>`;
   const until=x.s.closeT+WIN[S.exp]*1000,exp=x.s.closeT+S.exp*60000;
   const st=x.kind==="signal"?`<div class="st ok">✅ VALIDATED ${x.d.tier} · enter now · <b data-until="${until}">${mmss(Math.max(0,Math.ceil((until-Date.now())/1000)))}</b> left · expiry ${uM(exp)} UAE</div>`
-    :x.kind==="lean"?`<div class="st off">Lean only, not proven: demo account only</div>`
+    :x.kind==="lean"?`<div class="st off">Lean only, NOT a signal: do not trade it</div>`
     :x.kind==="off"?`<div class="st off">${x.d.off==="OFF-HOURS"?"Outside 11:00-20:00 UAE (strict filter)":"Candle too volatile, skipped"}</div>`
     :x.kind==="closed"?`<div class="st">Market closed or data delayed</div>`
-    :x.kind==="conflict"?`<div class="st">Proven sources disagree: no trade</div>`:x.s.skip===Math.floor(Date.now()/TF())?`<div class="st off">Not refreshed this candle: the free data plan covers about 6 pairs per minute, so the top 5 pairs get priority. This pair takes its turn on a later candle.</div>`
+    :x.kind==="conflict"?`<div class="st">Proven sources disagree: no trade</div>`
+    :x.kind==="weak"?`<div class="st off">A proven ${x.side} setup fired, but the rest of the analysis does not back it (confidence ${x.conf}% &lt; ${OTC_MIN_CONF}%): skipped</div>`:x.s.skip===Math.floor(Date.now()/TF())?`<div class="st off">Not refreshed this candle: the free data plan covers about 6 pairs per minute, so the top 5 pairs get priority. This pair takes its turn on a later candle.</div>`
     :!x.open?`<div class="st">Entry window for this candle has passed: next check at the next candle close</div>`
     :`<div class="st">No clear setup on this candle (leaning ${x.side})</div>`;
   const bars=x.parts.map(q=>{const c=q.v>0.05?"up":q.v<-0.05?"dn":"";return `<span>${q.k}</span><div class="dv"><i class="${q.v>=0?"up":"dn"}" data-s="${q.v.toFixed(3)}"></i></div><span class="vv ${c}">${q.v>0.05?"▲":q.v<-0.05?"▼":"–"}${Math.round(Math.abs(q.v)*100)}</span>`;}).join("");
@@ -873,7 +901,7 @@ function startScan(){
     if(D.real){g.font="600 10px system-ui,sans-serif";g.textAlign="right";g.fillStyle="#bae6fd";g.fillText(D.C[n-1].toFixed(D.jpy?3:5),W-6,TOP+2);}
     g.globalAlpha=1;
     const e=$("scHit");if(e){const txt=stage===0?`Collecting ${n} of ${N} candles...`:stage===1?`Analysing indicators, candle patterns and trend... ${Math.round(ease((tc-P1)/(P2-P1))*100)}%`
-      :!D.has?"Prediction: waiting for live data":`Prediction: <span class="${D.dir>0?"u":"d"}">${D.dir>0?"▲ UP":"▼ DOWN"}</span> · confidence ${D.conf}%${D.win?` · win ${pct(D.win)}`:""}`;
+      :!D.has?"AI lean: waiting for live data":`AI lean (not a signal): <span class="${D.dir>0?"u":"d"}">${D.dir>0?"▲ UP":"▼ DOWN"}</span> · confidence ${D.conf}%${D.win?` · win ${pct(D.win)}`:""}`;
       if(e._t!==txt){e._t=txt;e.innerHTML=txt;}}
     if(reduced){scanRAF=null;return;}
     scanRAF=requestAnimationFrame(frame);
@@ -889,7 +917,7 @@ function bannerHtml(){
        <div class="steps"><span id="st0">1 Collect</span><span id="st1">2 Analyse</span><span id="st2">3 Predict</span></div>
        <canvas class="wcv" id="scCv"></canvas>
        <div class="wread" id="scHit">Collecting data...</div>
-       <div class="wsub">No signal locked yet. Next ${tfm()}m candle closes at <b data-next="1">${uS(nxt)}</b> UAE</div>`;
+       <div class="wsub">Trade ONLY when a green or red VALIDATED card appears here. No signal locked yet. Next ${tfm()}m candle closes at <b data-next="1">${uS(nxt)}</b> UAE</div>`;
       startScan();}
     const n=b.querySelector("[data-next]");if(n)n.textContent=uS(nxt);return;}
   const closeT=c.s.closeT,until=closeT+WIN[S.exp]*1000,expiryAt=closeT+S.exp*60000,ok=c.kind==="signal";
